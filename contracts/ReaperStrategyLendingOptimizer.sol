@@ -3,9 +3,21 @@
 pragma solidity ^0.8.0;
 
 import "./abstract/ReaperBaseStrategyv2.sol";
-import "./interfaces/IMasterChef.sol";
+import "./interfaces/IRouter.sol";
+import "./interfaces/IFactory.sol";
+import "./interfaces/IPoolToken.sol";
+import "./interfaces/ICollateral.sol";
 import "./interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+
+import "hardhat/console.sol";
+
+interface IERC20 {
+    function name() external view returns (string memory);
+
+    function symbol() external pure returns (string memory);
+}
 
 /**
  * @dev Deposits want in Tarot, Alpaca or Alpha Homora lending pools for the highest APRs.
@@ -16,6 +28,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     // 3rd-party contract addresses
     address public constant SPOOKY_ROUTER = address(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
     address public constant TAROT_ROUTER = address(0x283e62CFe14b352dB8e30A9575481DCbf589Ad98);
+    address public constant TAROT_REQUIEM_ROUTER = address(0x3F7E61C5dd29F9380b270551e438B65c29183a7c);
+    address public constant TAROT_CARCOSA_ROUTER = address(0x26B21e8cd033ec68e4180DC5fc14446905E94572);
 
     /**
      * @dev Tokens Used:
@@ -23,7 +37,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {want} - Address of the token being lent
      */
     address public constant WFTM = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
-    address public constant want = address(0x45f4682B560d4e3B8FF1F1b3A38FDBe775C7177b);
+    address public constant want = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
 
     /**
      * @dev Paths used to swap tokens:
@@ -36,10 +50,10 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     address[] public tombToMaiPath;
 
     /**
-     * @dev Tomb variables
+     * @dev Tarot variables
      * {poolId} - ID of pool in which to deposit LP tokens
      */
-    uint256 public poolId;
+    uint public minWantInPool;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -51,6 +65,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         address[] memory _strategists
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
+        minWantInPool = 5 ether;
     }
 
     /**
@@ -227,5 +242,97 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function _reclaimWant() internal override {
         // IMasterChef(TSHARE_REWARDS_POOL).emergencyWithdraw(poolId);
+    }
+
+    // function allLendingPools(uint) external view returns (address uniswapV2Pair);
+	// function allLendingPoolsLength() external view returns (uint);
+
+    function _processPool(address factory, address router, uint index) internal {
+        address lpToken = IFactory(factory).allLendingPools(index);
+
+        address token0 = IUniswapV2Pair(lpToken).token0();
+        address token1 = IUniswapV2Pair(lpToken).token1();
+
+        // if (token0 == want || token1 == want) {
+                // nrOfWantPools++;
+                // console.log("nrOfWantPools: ", nrOfWantPools);
+                console.log("index: ", index);
+                console.log("lpToken: ", lpToken);
+                string memory token0Name = IERC20(token0).symbol();
+                string memory token1Name = IERC20(token1).symbol();
+                
+                (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(lpToken);
+                
+                address underlying = IPoolToken(lpToken).underlying();
+                
+                uint totalBalance = IPoolToken(lpToken).totalBalance();
+                
+                uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
+                
+                if (underlyingWantBalance > minWantInPool) {
+                    console.log("token0: ", token0);
+                    console.log("token1: ", token1);
+                    console.log("token0Name: ", token0Name);
+                    console.log("token1Name: ", token1Name);
+                    console.log("collateral: ", collateral);
+                    console.log("underlying: ", underlying);
+                    console.log("totalBalance: ", totalBalance);
+                    console.log("underlyingWantBalance: ", underlyingWantBalance);
+                }
+                console.log("--------------------------------------------");
+            // }
+    }
+
+    //function getPrices() external returns (uint256 price0, uint256 price1);
+    function getLendingPools() public {
+        console.log("getLendingPools");
+        // address factory = IRouter(TAROT_ROUTER).factory();
+        // console.log("factory: ", factory);
+        // uint nrOfPools = IFactory(factory).allLendingPoolsLength();
+        // console.log("nrOfPools: ", nrOfPools);
+        // uint nrOfWantPools = 0;
+        // for (uint256 index = 0; index < nrOfPools; index++) {
+        //     address lpToken = IFactory(factory).allLendingPools(index);
+
+        // //     function getLendingPool(address uniswapV2Pair)
+        // // external
+        // // view
+        // // returns (
+        // //     address collateral,
+        // //     address borrowableA,
+        // //     address borrowableB
+        // // );
+            
+        //     address token0 = IUniswapV2Pair(lpToken).token0();
+        //     address token1 = IUniswapV2Pair(lpToken).token1();
+        //     // if (token0 == want || token1 == want) {
+        //         nrOfWantPools++;
+        //         console.log("nrOfWantPools: ", nrOfWantPools);
+        //         console.log("lpToken: ", lpToken);
+        //         string memory token0Name = IERC20(token0).symbol();
+        //         string memory token1Name = IERC20(token1).symbol();
+        //         console.log("token0: ", token0);
+        //         console.log("token1: ", token1);
+        //         console.log("token0Name: ", token0Name);
+        //         console.log("token1Name: ", token1Name);
+        //         (address collateral,address borrowableA,address borrowableB) = IRouter(TAROT_ROUTER).getLendingPool(lpToken);
+        //         console.log("collateral: ", collateral);
+        //         console.log("--------------------------------------------");
+        //     // }
+        // }
+
+        address requiemFactory = IRouter(TAROT_REQUIEM_ROUTER).factory();
+        uint nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
+
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            _processPool(requiemFactory, TAROT_REQUIEM_ROUTER, index);
+        }
+
+        // address carcosaFactory = IRouter(TAROT_CARCOSA_ROUTER).factory();
+        // uint nrOfPools = IFactory(carcosaFactory).allLendingPoolsLength();
+
+        // for (uint256 index = 0; index < nrOfPools; index++) {
+        //     _processPool(carcosaFactory, TAROT_CARCOSA_ROUTER, index);
+        // }
     }
 }
