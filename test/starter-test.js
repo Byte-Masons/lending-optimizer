@@ -282,7 +282,7 @@ describe('Vaults', function () {
     });
 
     it('should be able to get lending pools', async function () {
-      await strategy.getLendingPools();
+      await strategy.setUsedPools();
     });
   });
 });

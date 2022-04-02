@@ -54,6 +54,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {poolId} - ID of pool in which to deposit LP tokens
      */
     uint public minWantInPool;
+    address[] public poolTokens;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -248,91 +249,52 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 	// function allLendingPoolsLength() external view returns (uint);
 
     function _processPool(address factory, address router, uint index) internal {
-        address lpToken = IFactory(factory).allLendingPools(index);
+        address poolToken = IFactory(factory).allLendingPools(index);
 
-        address token0 = IUniswapV2Pair(lpToken).token0();
-        address token1 = IUniswapV2Pair(lpToken).token1();
+        address token0 = IUniswapV2Pair(poolToken).token0();
+        address token1 = IUniswapV2Pair(poolToken).token1();
 
-        // if (token0 == want || token1 == want) {
-                // nrOfWantPools++;
-                // console.log("nrOfWantPools: ", nrOfWantPools);
-                console.log("index: ", index);
-                console.log("lpToken: ", lpToken);
-                string memory token0Name = IERC20(token0).symbol();
-                string memory token1Name = IERC20(token1).symbol();
+        if (token0 == want || token1 == want) {
+            // string memory token0Name = IERC20(token0).symbol();
+            // string memory token1Name = IERC20(token1).symbol();
                 
-                (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(lpToken);
-                
-                address underlying = IPoolToken(lpToken).underlying();
-                
-                uint totalBalance = IPoolToken(lpToken).totalBalance();
-                
+            // (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(poolToken);
+
+            // console.log(IPoolToken(poolToken).name());
+            // string memory tokenName = IPoolToken(poolToken).name();
+            // console.log(poolToken);
+            // Filter out these tokens as they are not pool tokens but somehow are in the list
+            if (poolToken != address(0x84311ECC54D7553378c067282940b0fdfb913675) &&
+            poolToken != address(0xA48869049e36f8Bfe0Cc5cf655632626988c0140)) {
+                address underlying = IPoolToken(poolToken).underlying();
                 uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
-                
                 if (underlyingWantBalance > minWantInPool) {
-                    console.log("token0: ", token0);
-                    console.log("token1: ", token1);
-                    console.log("token0Name: ", token0Name);
-                    console.log("token1Name: ", token1Name);
-                    console.log("collateral: ", collateral);
-                    console.log("underlying: ", underlying);
-                    console.log("totalBalance: ", totalBalance);
-                    console.log("underlyingWantBalance: ", underlyingWantBalance);
+                    poolTokens.push(poolToken);
                 }
-                console.log("--------------------------------------------");
+            }
+
+            // // uint totalBalance = IPoolToken(poolToken).totalBalance();
+                
+            // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
+                
+            // if (underlyingWantBalance > minWantInPool) {
+            //     // poolTokens.push(poolToken);
             // }
+        }
     }
 
-    //function getPrices() external returns (uint256 price0, uint256 price1);
-    function getLendingPools() public {
-        console.log("getLendingPools");
-        // address factory = IRouter(TAROT_ROUTER).factory();
-        // console.log("factory: ", factory);
-        // uint nrOfPools = IFactory(factory).allLendingPoolsLength();
-        // console.log("nrOfPools: ", nrOfPools);
-        // uint nrOfWantPools = 0;
-        // for (uint256 index = 0; index < nrOfPools; index++) {
-        //     address lpToken = IFactory(factory).allLendingPools(index);
-
-        // //     function getLendingPool(address uniswapV2Pair)
-        // // external
-        // // view
-        // // returns (
-        // //     address collateral,
-        // //     address borrowableA,
-        // //     address borrowableB
-        // // );
-            
-        //     address token0 = IUniswapV2Pair(lpToken).token0();
-        //     address token1 = IUniswapV2Pair(lpToken).token1();
-        //     // if (token0 == want || token1 == want) {
-        //         nrOfWantPools++;
-        //         console.log("nrOfWantPools: ", nrOfWantPools);
-        //         console.log("lpToken: ", lpToken);
-        //         string memory token0Name = IERC20(token0).symbol();
-        //         string memory token1Name = IERC20(token1).symbol();
-        //         console.log("token0: ", token0);
-        //         console.log("token1: ", token1);
-        //         console.log("token0Name: ", token0Name);
-        //         console.log("token1Name: ", token1Name);
-        //         (address collateral,address borrowableA,address borrowableB) = IRouter(TAROT_ROUTER).getLendingPool(lpToken);
-        //         console.log("collateral: ", collateral);
-        //         console.log("--------------------------------------------");
-        //     // }
-        // }
+    function setUsedPools() public {
+        address factory = IRouter(TAROT_ROUTER).factory();
+        uint nrOfPools = IFactory(factory).allLendingPoolsLength();
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            _processPool(factory, TAROT_ROUTER, index);
+        }
 
         address requiemFactory = IRouter(TAROT_REQUIEM_ROUTER).factory();
-        uint nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
+        nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
 
         for (uint256 index = 0; index < nrOfPools; index++) {
             _processPool(requiemFactory, TAROT_REQUIEM_ROUTER, index);
         }
-
-        // address carcosaFactory = IRouter(TAROT_CARCOSA_ROUTER).factory();
-        // uint nrOfPools = IFactory(carcosaFactory).allLendingPoolsLength();
-
-        // for (uint256 index = 0; index < nrOfPools; index++) {
-        //     _processPool(carcosaFactory, TAROT_CARCOSA_ROUTER, index);
-        // }
     }
 }

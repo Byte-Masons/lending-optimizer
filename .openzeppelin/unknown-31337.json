@@ -8,7 +8,7 @@
     },
     {
       "address": "0x36b58F5C1969B7b6591D752ea6F5486D069010AB",
-      "txHash": "0x315daf9d538d01f66662bbda4611902eb1e9205ca003c0196c57d33b36b4cf57",
+      "txHash": "0xa1236c21dbbf0d446473c4a013a848b6c7027f1ae7400c7431273a9073859ec4",
       "kind": "uups"
     }
   ],
@@ -543,9 +543,9 @@
         }
       }
     },
-    "6d1ad2fc2e09e9bc90c285197c31822204a5c229ef53c8365b5ec3262965bd65": {
+    "87a3844378053a5ea451d92bf07fc64f047055b599ff9064b174d6a6d9f36a94": {
       "address": "0x51A1ceB83B83F1985a81C295d1fF28Afef186E02",
-      "txHash": "0x9a66189244f2a368dc62a057e6104a55bf6bf4f0027edc705519dfcab9863eb7",
+      "txHash": "0x1726cb02db43d22c32f75db2bd9c30da75f5994ddc7af1d3ceba628366b3d7d0",
       "layout": {
         "storage": [
           {
@@ -648,7 +648,7 @@
             "label": "harvestLog",
             "offset": 0,
             "slot": "351",
-            "type": "t_array(t_struct(Harvest)5681_storage)dyn_storage",
+            "type": "t_array(t_struct(Harvest)5629_storage)dyn_storage",
             "contract": "ReaperBaseStrategyv2",
             "src": "contracts\\abstract\\ReaperBaseStrategyv2.sol:27"
           },
@@ -771,6 +771,14 @@
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
             "src": "contracts\\ReaperStrategyLendingOptimizer.sol:56"
+          },
+          {
+            "label": "poolTokens",
+            "offset": 0,
+            "slot": "367",
+            "type": "t_array(t_address)dyn_storage",
+            "contract": "ReaperStrategyLendingOptimizer",
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:57"
           }
         ],
         "types": {
@@ -786,7 +794,7 @@
             "label": "bytes32[]",
             "numberOfBytes": "32"
           },
-          "t_array(t_struct(Harvest)5681_storage)dyn_storage": {
+          "t_array(t_struct(Harvest)5629_storage)dyn_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest[]",
             "numberOfBytes": "32"
           },
@@ -834,7 +842,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(Harvest)5681_storage": {
+          "t_struct(Harvest)5629_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest",
             "members": [
               {
