@@ -10,6 +10,7 @@ import "./interfaces/ICollateral.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import "hardhat/console.sol";
 
@@ -25,11 +26,19 @@ interface IERC20 {
 contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
+    struct Pool {
+        uint poolIndex;
+        RouterType router;
+        address poolAddress;
+    }
+
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
+    EnumerableSetUpgradeable.AddressSet private pools;
+
     // 3rd-party contract addresses
     address public constant SPOOKY_ROUTER = address(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
     address public constant TAROT_ROUTER = address(0x283e62CFe14b352dB8e30A9575481DCbf589Ad98);
     address public constant TAROT_REQUIEM_ROUTER = address(0x3F7E61C5dd29F9380b270551e438B65c29183a7c);
-    address public constant TAROT_CARCOSA_ROUTER = address(0x26B21e8cd033ec68e4180DC5fc14446905E94572);
 
     /**
      * @dev Tokens Used:
@@ -54,7 +63,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {poolId} - ID of pool in which to deposit LP tokens
      */
     uint public minWantInPool;
-    address[] public poolTokens;
+    Pool[] public usedPools;
+    uint constant public MAX_POOLS = 20;
+    enum RouterType{ CLASSIC, REQUIEM }
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -120,19 +131,19 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
-     * @dev Helper function to swap tokens given an {_amount}, swap {_path}, and {_router}.
+     * @dev Helper function to swap tokens given an {_amount}, swap {_path}, and {_routerType}.
      */
     function _swap(
         uint256 _amount,
         address[] memory _path,
-        address _router
+        address _routerType
     ) internal {
         if (_path.length < 2 || _amount == 0) {
             return;
         }
 
-        IERC20Upgradeable(_path[0]).safeIncreaseAllowance(_router, _amount);
-        IUniswapV2Router02(_router).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        IERC20Upgradeable(_path[0]).safeIncreaseAllowance(_routerType, _amount);
+        IUniswapV2Router02(_routerType).swapExactTokensForTokensSupportingFeeOnTransferTokens(
             _amount,
             0,
             _path,
@@ -248,53 +259,113 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     // function allLendingPools(uint) external view returns (address uniswapV2Pair);
 	// function allLendingPoolsLength() external view returns (uint);
 
-    function _processPool(address factory, address router, uint index) internal {
-        address poolToken = IFactory(factory).allLendingPools(index);
+    // function _processPool(address factory, address router, uint index) internal {
+    //     address poolToken = IFactory(factory).allLendingPools(index);
 
-        address token0 = IUniswapV2Pair(poolToken).token0();
-        address token1 = IUniswapV2Pair(poolToken).token1();
+    //     address token0 = IUniswapV2Pair(poolToken).token0();
+    //     address token1 = IUniswapV2Pair(poolToken).token1();
 
-        if (token0 == want || token1 == want) {
-            // string memory token0Name = IERC20(token0).symbol();
-            // string memory token1Name = IERC20(token1).symbol();
+    //     if (token0 == want || token1 == want) {
+            
                 
-            // (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(poolToken);
+    //         // (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(poolToken);
 
-            // console.log(IPoolToken(poolToken).name());
-            // string memory tokenName = IPoolToken(poolToken).name();
-            // console.log(poolToken);
-            // Filter out these tokens as they are not pool tokens but somehow are in the list
-            if (poolToken != address(0x84311ECC54D7553378c067282940b0fdfb913675) &&
-            poolToken != address(0xA48869049e36f8Bfe0Cc5cf655632626988c0140)) {
-                address underlying = IPoolToken(poolToken).underlying();
-                uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
-                if (underlyingWantBalance > minWantInPool) {
-                    poolTokens.push(poolToken);
-                }
+    //         // console.log(IPoolToken(poolToken).name());
+    //         // string memory tokenName = IPoolToken(poolToken).name();
+    //         // console.log(poolToken);
+    //         // Filter out these tokens as they are not pool tokens but somehow are in the list
+    //         if (poolToken != address(0x84311ECC54D7553378c067282940b0fdfb913675) &&
+    //         poolToken != address(0xA48869049e36f8Bfe0Cc5cf655632626988c0140)) {
+    //             string memory token0Name = IERC20(token0).symbol();
+    //             string memory token1Name = IERC20(token1).symbol();
+    //             console.log(token0Name, "-", token1Name);
+    //             usedPools.push(poolToken);
+    //             // address underlying = IPoolToken(poolToken).underlying();
+    //             // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
+    //             // if (underlyingWantBalance > minWantInPool) {
+                    
+    //             // }
+    //         }
+
+    //         // // uint totalBalance = IPoolToken(poolToken).totalBalance();
+                
+    //         // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
+                
+    //         // if (underlyingWantBalance > minWantInPool) {
+    //         //     // usedPools.push(poolToken);
+    //         // }
+    //     }
+    // }
+
+    // function setUsedPools() public {
+    //     address factory = IRouter(TAROT_ROUTER).factory();
+    //     uint nrOfPools = IFactory(factory).allLendingPoolsLength();
+    //     for (uint256 index = 0; index < nrOfPools; index++) {
+    //         _processPool(factory, TAROT_ROUTER, index);
+    //     }
+
+    //     address requiemFactory = IRouter(TAROT_REQUIEM_ROUTER).factory();
+    //     nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
+
+    //     for (uint256 index = 0; index < nrOfPools; index++) {
+    //         _processPool(requiemFactory, TAROT_REQUIEM_ROUTER, index);
+    //     }
+    // }
+
+    function addUsedPool(uint _poolIndex, RouterType _routerType) external {
+        _onlyStrategistOrOwner();
+        bool isPoolAlreadyAdded = false;
+        for (uint256 index = 0; index < usedPools.length; index++) {
+            uint currentPool = usedPools[index].poolIndex;
+            if (_poolIndex == currentPool) {
+                isPoolAlreadyAdded = true;
+                break;
             }
-
-            // // uint totalBalance = IPoolToken(poolToken).totalBalance();
-                
-            // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
-                
-            // if (underlyingWantBalance > minWantInPool) {
-            //     // poolTokens.push(poolToken);
-            // }
         }
+        require(!isPoolAlreadyAdded, "Pool already added");
+
+        address router;
+
+        if (_routerType == RouterType.CLASSIC) {
+            router = TAROT_ROUTER;
+        } else if (_routerType == RouterType.REQUIEM) {
+            router = TAROT_REQUIEM_ROUTER;
+        }
+
+        address factory = IRouter(router).factory();
+        address poolAddress = IFactory(factory).allLendingPools(_poolIndex);
+
+        Pool memory pool = Pool(_poolIndex, _routerType, poolAddress);
+        usedPools.push(pool);
+        pools.add(poolAddress);
     }
 
-    function setUsedPools() public {
-        address factory = IRouter(TAROT_ROUTER).factory();
-        uint nrOfPools = IFactory(factory).allLendingPoolsLength();
-        for (uint256 index = 0; index < nrOfPools; index++) {
-            _processPool(factory, TAROT_ROUTER, index);
-        }
-
-        address requiemFactory = IRouter(TAROT_REQUIEM_ROUTER).factory();
-        nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
-
-        for (uint256 index = 0; index < nrOfPools; index++) {
-            _processPool(requiemFactory, TAROT_REQUIEM_ROUTER, index);
-        }
+    /**
+     * @dev Removes a pool that will no longer be used.
+     */
+    function removeUsedPool(uint256 _poolIndex) external {
+        _onlyStrategistOrOwner();
+        require(usedPools.length > 1, "Must have at least 1 pool");
+        // address poolToRemove = usedPools[_poolIndex];
+        // // uint256 balance = poolxTokenBalance[poolId];
+        // // _aceLabWithdraw(poolId, balance);
+        // uint lastPoolIndex = usedPools.length - 1;
+        // address lastPool = usedPools[lastPoolIndex];
+        // usedPools[_poolIndex] = lastPool;
+        // usedPools.pop();
     }
+
+    // function _isAddressTarotPool(address _pool, address _routerType) internal view returns (bool) {
+    //     address factory = IRouter(_routerType).factory();
+    //     uint nrOfPools = IFactory(factory).allLendingPoolsLength();
+    //     bool isTarotPool = false;
+    //     for (uint256 index = 0; index < nrOfPools; index++) {
+    //         address currentPool = IFactory(factory).allLendingPools(index);
+    //         if (_pool == currentPool) {
+    //             isTarotPool = true;
+    //             break;
+    //         }
+    //     }
+    //     return isTarotPool;
+    // }
 }

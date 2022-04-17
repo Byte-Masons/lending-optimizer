@@ -281,8 +281,13 @@ describe('Vaults', function () {
       expect(hasCallFee).to.equal(true);
     });
 
-    it('should be able to get lending pools', async function () {
+    xit('should be able to get lending pools', async function () {
       await strategy.setUsedPools();
+    });
+    it('should be able to add a pool', async function () {
+      const poolIndex = 222;
+      const routerType = 0;
+      await strategy.addUsedPool(poolIndex, routerType);
     });
   });
 });
