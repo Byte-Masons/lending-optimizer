@@ -121,81 +121,37 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function _withdrawUnderlying(uint256 _amountToWithdraw) internal returns (uint256) {
         // keep track of how much we need to withdraw
         uint256 remainingUnderlyingNeeded = _amountToWithdraw;
-        uint256 withdrawn;
+        uint256 withdrawn = 0;
 
         address[] memory pools = usedPools.values();
         for (uint256 index = 0; index < pools.length; index++) {
-            // save some gas by storing locally
             address currentPool = pools[index];
             uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
 
-            // how much want our strategy has supplied to this pool
             uint256 suppliedToPool = wantSuppliedToPool(currentPool);
 
-            // total liquidity available in the pool in want
             uint256 poolAvailableWant = IERC20Upgradeable(want).balanceOf(currentPool);
 
-            // the minimum of the previous two values is the most want we can withdraw from this pool
             uint256 ableToPullInUnderlying = MathUpgradeable.min(suppliedToPool, poolAvailableWant);
 
-            // skip ahead to our next loop if we can't withdraw anything
             if (ableToPullInUnderlying == 0) {
                 continue;
             }
 
-            // figure out how much bToken we are able to burn from this pool for want.
-            uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / exchangeRate;
+            uint256 underlyingToWithdraw = MathUpgradeable.min(remainingUnderlyingNeeded, ableToPullInUnderlying);
+            uint256 bTokenToWithdraw = underlyingToWithdraw * 1 ether / exchangeRate;
 
-            // check if we need to pull as much as possible from our pools
-            if (_amountToWithdraw == type(uint256).max) {
-                // this is for withdrawing the maximum we safely can
-                if (poolAvailableWant > suppliedToPool) {
-                    // if possible, burn our whole bToken position to avoid dust
-                    uint256 balanceOfbToken = IBorrowable(currentPool).balanceOf(address(this));
-                    IBorrowable(currentPool).transfer(currentPool, balanceOfbToken);
-                    IBorrowable(currentPool).redeem(address(this));
-                } else {
-                    // otherwise, withdraw as much as we can
-                    IBorrowable(currentPool).transfer(currentPool, ableToPullInbToken);
-                    IBorrowable(currentPool).redeem(address(this));
-                }
-                continue;
-            }
+            IBorrowable(currentPool).transfer(currentPool, bTokenToWithdraw);
+            withdrawn += IBorrowable(currentPool).redeem(address(this));
 
-            // this is how much we need, converted to the bTokens of this specific pool. add 5 wei as a buffer for calculation losses.
-            uint256 remainingbTokenNeeded =
-                remainingUnderlyingNeeded * 1 ether / exchangeRate + 5;
-
-            // Withdraw all we need from the current pool if we can
-            if (ableToPullInbToken > remainingbTokenNeeded) {
-                IBorrowable(currentPool).transfer(currentPool, remainingbTokenNeeded);
-                uint256 pulled = IBorrowable(currentPool).redeem(address(this));
-
-                // add what we just withdrew to our total
-                withdrawn = withdrawn + pulled;
+            if (withdrawn > _amountToWithdraw) {
                 break;
             }
-            //Otherwise withdraw what we can from current pool
-            else {
-                // if there is more free liquidity than our amount deposited, just burn the whole bToken balance so we don't have dust
-                uint256 pulled;
-                if (poolAvailableWant > suppliedToPool) {
-                    uint256 balanceOfbToken = IBorrowable(currentPool).balanceOf(address(this));
-                    IBorrowable(currentPool).transfer(currentPool, balanceOfbToken);
-                    pulled = IBorrowable(currentPool).redeem(address(this));
-                } else {
-                    IBorrowable(currentPool).transfer(currentPool, ableToPullInbToken);
-                    pulled = IBorrowable(currentPool).redeem(address(this));
-                }
-                // add what we just withdrew to our total, subtract it from what we still need
-                withdrawn = withdrawn + pulled;
 
-                // don't want to overflow
-                if (remainingUnderlyingNeeded > pulled) {
-                    remainingUnderlyingNeeded = remainingUnderlyingNeeded - pulled;
-                } else {
-                    remainingUnderlyingNeeded = 0;
-                }
+            remainingUnderlyingNeeded = _amountToWithdraw - withdrawn;
+
+            if (remainingUnderlyingNeeded == 0) {
+                break;
             }
         }
         return withdrawn;
