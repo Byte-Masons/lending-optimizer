@@ -16,11 +16,11 @@ import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 
 import "hardhat/console.sol";
 
-interface IERC20 {
-    function name() external view returns (string memory);
+// interface IERC20 {
+//     function name() external view returns (string memory);
 
-    function symbol() external pure returns (string memory);
-}
+//     function symbol() external pure returns (string memory);
+// }
 
 /**
  * @dev Deposits want in Tarot, Alpaca or Alpha Homora lending pools for the highest APRs.
@@ -80,7 +80,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         minWantInPool = 5 ether;
-        sharePriceSnapshot = 0;
+        // sharePriceSnapshot = 0;
         minProfitToChargeFees = 1000;
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
         withdrawSlippageTolerance = 50;
@@ -93,7 +93,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function _deposit() internal override {
         uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this));
         if (wantBalance != 0) {
-            IERC20Upgradeable(want).transfer(depositPool, wantBalance);
+            IERC20Upgradeable(want).safeTransfer(depositPool, wantBalance);
             require(IBorrowable(depositPool).mint(address(this)) >= 0);
         }
     }
@@ -127,9 +127,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 remainingUnderlyingNeeded = _amountToWithdraw;
         uint256 withdrawn = 0;
 
-        address[] memory pools = usedPools.values();
-        for (uint256 index = 0; index < pools.length; index++) {
-            address currentPool = pools[index];
+        // address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < usedPools.length(); index++) {
+            address currentPool = usedPools.at(index);
             uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
 
             uint256 suppliedToPool = wantSuppliedToPool(currentPool);
@@ -148,15 +148,15 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             IBorrowable(currentPool).transfer(currentPool, bTokenToWithdraw);
             withdrawn += IBorrowable(currentPool).redeem(address(this));
 
-            if (withdrawn > _amountToWithdraw) {
+            if (withdrawn >= _amountToWithdraw) {
                 break;
             }
 
             remainingUnderlyingNeeded = _amountToWithdraw - withdrawn;
 
-            if (remainingUnderlyingNeeded == 0) {
-                break;
-            }
+            // if (remainingUnderlyingNeeded == 0) {
+            //     break;
+            // }
         }
         return withdrawn;
     }
@@ -178,7 +178,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             }
             uint allocation = _allocations[index].allocation;
             uint depositAmount = MathUpgradeable.min(wantAvailable, allocation);
-            IERC20Upgradeable(want).transfer(pool, depositAmount);
+            IERC20Upgradeable(want).safeTransfer(pool, depositAmount);
             require(IBorrowable(pool).mint(address(this)) >= 0);
         }
     }
@@ -220,7 +220,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * @dev Core harvest function.
      *      Charges fees based on the amount of WFTM gained from reward
      */
-    function _chargeFees() internal {
+    function _chargeFees() internal { // planning to call this from withdraw as well?
         uint256 profit = profitSinceHarvest();
         if (profit >= minProfitToChargeFees) {
             uint256 wftmFee = 0;
@@ -238,7 +238,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
                 uint256 feeToStrategist = (treasuryFeeToVault * strategistFee) / PERCENT_DIVISOR;
                 treasuryFeeToVault -= feeToStrategist;
 
-                wftm.safeTransfer(msg.sender, callFeeToUser);
+                wftm.safeTransfer(msg.sender, callFeeToUser); // maybe have a flag to not charge callFee if calling from withdraw
                 wftm.safeTransfer(treasury, treasuryFeeToVault);
                 wftm.safeTransfer(strategistRemitter, feeToStrategist);
             }
@@ -247,9 +247,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     function updateExchangeRates() public {
-        address[] memory pools = usedPools.values();
-        for (uint256 index = 0; index < pools.length; index++) {
-            address pool = pools[index];
+        // address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < usedPools.length(); index++) {
+            address pool = usedPools.at(index);
             IBorrowable(pool).exchangeRate();
         }
     }
@@ -268,9 +268,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
     function balanceOfPools() public view returns (uint256) {
         uint256 poolBalance = 0;
-        address[] memory pools = usedPools.values();
-        for (uint256 index = 0; index < pools.length; index++) {
-            poolBalance += wantSuppliedToPool(pools[index]);
+        // address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < usedPools.length(); index++) {
+            poolBalance += wantSuppliedToPool(usedPools.at(index));
         }
         return poolBalance;
     }
@@ -381,12 +381,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function withdrawFromPool(address _pool) external returns (uint256) {
         _onlyKeeper();
         uint256 wantSupplied = wantSuppliedToPool(_pool);
-        if (wantSupplied > 0) {
+        if (wantSupplied != 0) { // if (wantSupplied > 1e5) could probably make the min value configurable
             uint256 wantAvailable = IERC20Upgradeable(want).balanceOf(_pool);
             uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
             uint256 ableToPullInUnderlying = MathUpgradeable.min(wantSupplied, wantAvailable);
             uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / currentExchangeRate;
-            if (ableToPullInbToken > 0) {
+            if (ableToPullInbToken != 0) {
                 IBorrowable(_pool).transfer(_pool, ableToPullInbToken);
                 IBorrowable(_pool).redeem(address(this));
             }
@@ -402,14 +402,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
         require(usedPools.contains(_pool), "Pool not used");
+        uint256 wantSupplied = wantSuppliedToPool(_pool);
+        require(wantSupplied == 0, "Want is still supplied"); // should there be a min that we don't care about? like 10^5 or something
+        
+        usedPools.remove(_pool);
         if (_pool == depositPool) {
             depositPool = usedPools.at(0);
         }
-        require(depositPool != _pool, "Cannot remove depositPool");
-        uint256 wantSupplied = wantSuppliedToPool(_pool);
-        require(wantSupplied == 0, "Want is still supplied");
-        
-        usedPools.remove(_pool);
     }
 
     /**
