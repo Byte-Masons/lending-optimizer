@@ -34,6 +34,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint allocation;
     }
 
+    struct Pool {
+        RouterType routerType;
+        uint index;
+    }
+
     /**
      * Reaper Roles
      */
@@ -119,7 +124,6 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     function _withdrawUnderlying(uint256 _amountToWithdraw) internal returns (uint256) {
-        // keep track of how much we need to withdraw
         uint256 remainingUnderlyingNeeded = _amountToWithdraw;
         uint256 withdrawn = 0;
 
@@ -334,22 +338,41 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _reclaimWant();
     }
 
-    function addUsedPool(uint _poolIndex, RouterType _routerType) external {
+    function addUsedPools(Pool[] memory _poolsToAdd) external {
+        _onlyKeeper();
+        for (uint256 index = 0; index < _poolsToAdd.length; index++) {
+            Pool memory pool = _poolsToAdd[index];
+            addUsedPool(pool.index, pool.routerType);
+        }
+    }
+
+    function addUsedPool(uint _poolIndex, RouterType _routerType) public {
         _onlyKeeper();
         
         address router;
+        console.log("_poolIndex: ", _poolIndex);
+        console.log("_routerType: ", uint(_routerType));
 
         if (_routerType == RouterType.CLASSIC) {
             router = TAROT_ROUTER;
         } else if (_routerType == RouterType.REQUIEM) {
             router = TAROT_REQUIEM_ROUTER;
         }
+        console.log("router: ", router);
 
         address factory = IRouter(router).factory();
-        address poolAddress = IFactory(factory).allLendingPools(_poolIndex);
+        address lpAddress = IFactory(factory).allLendingPools(_poolIndex);
+        console.log("lpAddress: ", lpAddress);
+        address lp0 = IUniswapV2Pair(lpAddress).token0();
+        address lp1 = IUniswapV2Pair(lpAddress).token1();
+        console.log("lp0: ", lp0);
+        console.log("lp1: ", lp1);
+        bool containsWant = lp0 == want || lp1 == want;
+        require(containsWant, "Pool does not contain want");
+        (,,,address borrowable0, address borrowable1) = IFactory(factory).getLendingPool(lpAddress);
+        address poolAddress = lp0 == want ? borrowable0 : borrowable1;
         bool isPoolAlreadyAdded = usedPools.contains(poolAddress);
         require(!isPoolAlreadyAdded, "Pool already added");
-        require(IBorrowable(poolAddress).underlying() == want, "Pool underlying != want");
         require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
         
         usedPools.add(poolAddress);

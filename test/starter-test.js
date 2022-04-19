@@ -36,9 +36,9 @@ describe('Vaults', function () {
 
   const treasuryAddr = '0x0e7c5313E9BB80b654734d9b7aB1FB01468deE3b';
   const paymentSplitterAddress = '0x63cbd4134c2253041F370472c130e92daE4Ff174';
-  const wantAddress = '0x45f4682B560d4e3B8FF1F1b3A38FDBe775C7177b';
+  const wantAddress = '0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83';
 
-  const wantHolderAddr = '0xB339ac13d9dAe79Ab6caD15Ec8903131099ceEA5';
+  const wantHolderAddr = '0x0f2A144d711E7390d72BD474653170B201D504C8';
   const strategistAddr = '0x1A20D7A31e5B3Bc5f02c8A146EF6f394502a10c4';
 
   let owner;
@@ -53,7 +53,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 35046948,
+            blockNumber: 36478050,
           },
         },
       ],
@@ -288,6 +288,23 @@ describe('Vaults', function () {
       const poolIndex = 0;
       const routerType = 0;
       await strategy.addUsedPool(poolIndex, routerType);
+    });
+    it('should be able to add multiple pools', async function () {
+      const pools = [
+        {
+          routerType: 0,
+          index: 44,
+        },
+        {
+          routerType: 1,
+          index: 3,
+        },
+        {
+          routerType: 0,
+          index: 67,
+        },
+      ];
+      await strategy.addUsedPools(pools);
     });
   });
 });
