@@ -8,7 +8,7 @@
     },
     {
       "address": "0x36b58F5C1969B7b6591D752ea6F5486D069010AB",
-      "txHash": "0x555adb138ca6dcd0d34d9e06e87452b35d5048a3ea11afd2d632d02722ae4f88",
+      "txHash": "0xaeb3e92d38bb51f8685fd613e3aa3ac384bdccf6fa9881d50a1323433af2fdaf",
       "kind": "uups"
     }
   ],
@@ -543,9 +543,9 @@
         }
       }
     },
-    "f6896dac379469803601a1e6aee402344c2903ec5565973aeff33aac907836bb": {
+    "dd8b37d8d4c3fe3f2bb72df2b8bd6e106bcdc9c0e8077d483ad96651cf081585": {
       "address": "0x51A1ceB83B83F1985a81C295d1fF28Afef186E02",
-      "txHash": "0x75a6deb93b23d77bb173f573c71dc05a46db8d5347a461697699461f6873c4f1",
+      "txHash": "0x52c23ca102db9d3ac4da05333854148ec1a486220b5b704aba803f0b5ff5f7e1",
       "layout": {
         "storage": [
           {
@@ -648,7 +648,7 @@
             "label": "harvestLog",
             "offset": 0,
             "slot": "351",
-            "type": "t_array(t_struct(Harvest)5631_storage)dyn_storage",
+            "type": "t_array(t_struct(Harvest)5556_storage)dyn_storage",
             "contract": "ReaperBaseStrategyv2",
             "src": "contracts\\abstract\\ReaperBaseStrategyv2.sol:27"
           },
@@ -746,7 +746,7 @@
             "slot": "363",
             "type": "t_array(t_address)dyn_storage",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:52"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:49"
           },
           {
             "label": "wftmToTombPath",
@@ -754,7 +754,7 @@
             "slot": "364",
             "type": "t_array(t_address)dyn_storage",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:53"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:50"
           },
           {
             "label": "tombToMaiPath",
@@ -762,7 +762,7 @@
             "slot": "365",
             "type": "t_array(t_address)dyn_storage",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:54"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:51"
           },
           {
             "label": "minWantInPool",
@@ -770,15 +770,15 @@
             "slot": "366",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:60"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:57"
           },
           {
             "label": "usedPools",
             "offset": 0,
             "slot": "367",
-            "type": "t_array(t_struct(Pool)4510_storage)dyn_storage",
+            "type": "t_struct(AddressSet)2499_storage",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:61"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:58"
           }
         ],
         "types": {
@@ -794,12 +794,8 @@
             "label": "bytes32[]",
             "numberOfBytes": "32"
           },
-          "t_array(t_struct(Harvest)5631_storage)dyn_storage": {
+          "t_array(t_struct(Harvest)5556_storage)dyn_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest[]",
-            "numberOfBytes": "32"
-          },
-          "t_array(t_struct(Pool)4510_storage)dyn_storage": {
-            "label": "struct ReaperStrategyLendingOptimizer.Pool[]",
             "numberOfBytes": "32"
           },
           "t_array(t_uint256)49_storage": {
@@ -817,14 +813,6 @@
           "t_bytes32": {
             "label": "bytes32",
             "numberOfBytes": "32"
-          },
-          "t_enum(RouterType)4564": {
-            "label": "enum ReaperStrategyLendingOptimizer.RouterType",
-            "members": [
-              "CLASSIC",
-              "REQUIEM"
-            ],
-            "numberOfBytes": "1"
           },
           "t_mapping(t_address,t_bool)": {
             "label": "mapping(address => bool)",
@@ -854,7 +842,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(Harvest)5631_storage": {
+          "t_struct(Harvest)5556_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest",
             "members": [
               {
@@ -866,24 +854,6 @@
               {
                 "label": "vaultSharePrice",
                 "type": "t_uint256",
-                "offset": 0,
-                "slot": "1"
-              }
-            ],
-            "numberOfBytes": "64"
-          },
-          "t_struct(Pool)4510_storage": {
-            "label": "struct ReaperStrategyLendingOptimizer.Pool",
-            "members": [
-              {
-                "label": "poolIndex",
-                "type": "t_uint256",
-                "offset": 0,
-                "slot": "0"
-              },
-              {
-                "label": "router",
-                "type": "t_enum(RouterType)4564",
                 "offset": 0,
                 "slot": "1"
               }

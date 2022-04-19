@@ -285,7 +285,7 @@ describe('Vaults', function () {
       await strategy.setUsedPools();
     });
     it('should be able to add a pool', async function () {
-      const poolIndex = 222;
+      const poolIndex = 0;
       const routerType = 0;
       await strategy.addUsedPool(poolIndex, routerType);
     });

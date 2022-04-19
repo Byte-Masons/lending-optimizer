@@ -7,10 +7,12 @@ import "./interfaces/IRouter.sol";
 import "./interfaces/IFactory.sol";
 import "./interfaces/IPoolToken.sol";
 import "./interfaces/ICollateral.sol";
+import "./interfaces/IBorrowable.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 
 import "hardhat/console.sol";
 
@@ -25,16 +27,18 @@ interface IERC20 {
  */
 contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
-    struct Pool {
-        uint poolIndex;
-        RouterType router;
+    struct PoolAllocation {
         address poolAddress;
+        uint allocation;
     }
 
-    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
-    EnumerableSetUpgradeable.AddressSet private pools;
-
+    /**
+     * Reaper Roles
+     */
+    bytes32 public constant KEEPER = keccak256("KEEPER");
+    
     // 3rd-party contract addresses
     address public constant SPOOKY_ROUTER = address(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
     address public constant TAROT_ROUTER = address(0x283e62CFe14b352dB8e30A9575481DCbf589Ad98);
@@ -49,23 +53,16 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     address public constant want = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
 
     /**
-     * @dev Paths used to swap tokens:
-     * {tshareToWftmPath} - to swap {TSHARE} to {WFTM} (using SPOOKY_ROUTER)
-     * {wftmToTombPath} - to swap {WFTM} to {lpToken0} (using SPOOKY_ROUTER)
-     * {tombToMaiPath} - to swap half of {lpToken0} to {lpToken1} (using TOMB_ROUTER)
-     */
-    address[] public tshareToWftmPath;
-    address[] public wftmToTombPath;
-    address[] public tombToMaiPath;
-
-    /**
      * @dev Tarot variables
-     * {poolId} - ID of pool in which to deposit LP tokens
      */
     uint public minWantInPool;
-    Pool[] public usedPools;
+    EnumerableSetUpgradeable.AddressSet private usedPools;
     uint constant public MAX_POOLS = 20;
     enum RouterType{ CLASSIC, REQUIEM }
+    address public depositPool;
+    uint256 public sharePriceSnapshot;
+    uint256 public minProfitToChargeFees;
+    uint256 public withdrawSlippageTolerance;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -78,6 +75,10 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         minWantInPool = 5 ether;
+        sharePriceSnapshot = 0;
+        minProfitToChargeFees = 1000;
+        sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
+        withdrawSlippageTolerance = 50;
     }
 
     /**
@@ -85,68 +86,171 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      It gets called whenever someone deposits in the strategy's vault contract.
      */
     function _deposit() internal override {
-        // uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this));
-        // if (wantBalance != 0) {
-        //     IERC20Upgradeable(want).safeIncreaseAllowance(TSHARE_REWARDS_POOL, wantBalance);
-        //     IMasterChef(TSHARE_REWARDS_POOL).deposit(poolId, wantBalance);
-        // }
+        uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this));
+        if (wantBalance != 0) {
+            IERC20Upgradeable(want).transfer(depositPool, wantBalance);
+            require(IBorrowable(depositPool).mint(address(this)) >= 0);
+        }
     }
 
     /**
      * @dev Withdraws funds and sends them back to the vault.
      */
     function _withdraw(uint256 _amount) internal override {
-        // uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
-        // if (wantBal < _amount) {
-        //     IMasterChef(TSHARE_REWARDS_POOL).withdraw(poolId, _amount - wantBal);
-        // }
+        uint256 initialWithdrawAmount = _amount;
+        uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
+        if (wantBal < _amount) {
+            uint256 withdrawn = _withdrawUnderlying(_amount - wantBal);
+            if (withdrawn + wantBal < _amount) {
+                _amount = withdrawn + wantBal;
+            }
+        }
 
-        // IERC20Upgradeable(want).safeTransfer(vault, _amount);
+        if(_amount < initialWithdrawAmount) {
+            require(
+                _amount >=
+                    (initialWithdrawAmount *
+                        (PERCENT_DIVISOR - withdrawSlippageTolerance)) /
+                        PERCENT_DIVISOR
+            );
+        }
+
+        IERC20Upgradeable(want).safeTransfer(vault, _amount);
+    }
+
+    function _withdrawUnderlying(uint256 _amountToWithdraw) internal returns (uint256) {
+        // keep track of how much we need to withdraw
+        uint256 remainingUnderlyingNeeded = _amountToWithdraw;
+        uint256 withdrawn;
+
+        address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < pools.length; index++) {
+            // save some gas by storing locally
+            address currentPool = pools[index];
+            IBorrowable(currentPool).exchangeRate();
+
+            // how much want our strategy has supplied to this pool
+            uint256 suppliedToPool = wantSuppliedToPool(currentPool);
+
+            // total liquidity available in the pool in want
+            uint256 poolAvailableWant = IERC20Upgradeable(want).balanceOf(currentPool);
+
+            // the minimum of the previous two values is the most want we can withdraw from this pool
+            uint256 ableToPullInUnderlying = MathUpgradeable.min(suppliedToPool, poolAvailableWant);
+
+            // skip ahead to our next loop if we can't withdraw anything
+            if (ableToPullInUnderlying == 0) {
+                continue;
+            }
+
+            // figure out how much bToken we are able to burn from this pool for want.
+            uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / IBorrowable(currentPool).exchangeRateLast();
+
+            // check if we need to pull as much as possible from our pools
+            if (_amountToWithdraw == type(uint256).max) {
+                // this is for withdrawing the maximum we safely can
+                if (poolAvailableWant > suppliedToPool) {
+                    // if possible, burn our whole bToken position to avoid dust
+                    uint256 balanceOfbToken = IBorrowable(currentPool).balanceOf(address(this));
+                    IBorrowable(currentPool).transfer(currentPool, balanceOfbToken);
+                    IBorrowable(currentPool).redeem(address(this));
+                } else {
+                    // otherwise, withdraw as much as we can
+                    IBorrowable(currentPool).transfer(currentPool, ableToPullInbToken);
+                    IBorrowable(currentPool).redeem(address(this));
+                }
+                continue;
+            }
+
+            // this is how much we need, converted to the bTokens of this specific pool. add 5 wei as a buffer for calculation losses.
+            uint256 remainingbTokenNeeded =
+                remainingUnderlyingNeeded * 1 ether / IBorrowable(currentPool).exchangeRateLast() + 5;
+
+            // Withdraw all we need from the current pool if we can
+            if (ableToPullInbToken > remainingbTokenNeeded) {
+                IBorrowable(currentPool).transfer(currentPool, remainingbTokenNeeded);
+                uint256 pulled = IBorrowable(currentPool).redeem(address(this));
+
+                // add what we just withdrew to our total
+                withdrawn = withdrawn + pulled;
+                break;
+            }
+            //Otherwise withdraw what we can from current pool
+            else {
+                // if there is more free liquidity than our amount deposited, just burn the whole bToken balance so we don't have dust
+                uint256 pulled;
+                if (poolAvailableWant > suppliedToPool) {
+                    uint256 balanceOfbToken = IBorrowable(currentPool).balanceOf(address(this));
+                    IBorrowable(currentPool).transfer(currentPool, balanceOfbToken);
+                    pulled = IBorrowable(currentPool).redeem(address(this));
+                } else {
+                    IBorrowable(currentPool).transfer(currentPool, ableToPullInbToken);
+                    pulled = IBorrowable(currentPool).redeem(address(this));
+                }
+                // add what we just withdrew to our total, subtract it from what we still need
+                withdrawn = withdrawn + pulled;
+
+                // don't want to overflow
+                if (remainingUnderlyingNeeded > pulled) {
+                    remainingUnderlyingNeeded = remainingUnderlyingNeeded - pulled;
+                } else {
+                    remainingUnderlyingNeeded = 0;
+                }
+            }
+        }
+        return withdrawn;
+    }
+
+    function rebalance(PoolAllocation[] memory _allocations) external {
+        _onlyKeeper();
+        for (uint256 index = 0; index < _allocations.length; index++) {
+            address pool = _allocations[index].poolAddress;
+            require(usedPools.contains(pool), "Pool is not authorized");
+            
+            // Save the top APR pool to deposit in to
+            if (index == 0) {
+                depositPool = pool;
+            }
+
+            uint wantAvailable = IERC20Upgradeable(want).balanceOf(address(this));
+            if (wantAvailable == 0) {
+                return;
+            }
+            uint allocation = _allocations[index].allocation;
+            uint depositAmount = MathUpgradeable.min(wantAvailable, allocation);
+            IERC20Upgradeable(want).transfer(pool, depositAmount);
+            require(IBorrowable(pool).mint(address(this)) >= 0);
+        }
     }
 
     /**
-     * @dev Core function of the strat, in charge of collecting and re-investing rewards.
-     *      1. Claims {TSHARE} from the {TSHARE_REWARDS_POOL}.
-     *      2. Swaps {TSHARE} to {WFTM} using {SPOOKY_ROUTER}.
-     *      3. Claims fees for the harvest caller and treasury.
-     *      4. Swaps the {WFTM} token for {lpToken0} using {SPOOKY_ROUTER}.
-     *      5. Swaps half of {lpToken0} to {lpToken1} using {TOMB_ROUTER}.
-     *      6. Creates new LP tokens and deposits.
+     * @dev Harvest is not strictly necessary since only fees are claimed
+     *      but it is kept here for compatibility
+     *      1. Claims fees for the harvest caller and treasury.
      */
     function _harvestCore() internal override {
-        // IMasterChef(TSHARE_REWARDS_POOL).deposit(poolId, 0); // deposit 0 to claim rewards
-
-        // uint256 tshareBal = IERC20Upgradeable(TSHARE).balanceOf(address(this));
-        // _swap(tshareBal, tshareToWftmPath, SPOOKY_ROUTER);
-
-        // _chargeFees();
-
-        // uint256 wftmBal = IERC20Upgradeable(WFTM).balanceOf(address(this));
-        // _swap(wftmBal, wftmToTombPath, SPOOKY_ROUTER);
-        // uint256 tombHalf = IERC20Upgradeable(lpToken0).balanceOf(address(this)) / 2;
-        // _swap(tombHalf, tombToMaiPath, TOMB_ROUTER);
-
-        // _addLiquidity();
-        // deposit();
+        _chargeFees();
     }
 
     /**
-     * @dev Helper function to swap tokens given an {_amount}, swap {_path}, and {_routerType}.
+     * @dev Helper function to swap tokens given {_from}, {_to} and {_amount}
      */
     function _swap(
-        uint256 _amount,
-        address[] memory _path,
-        address _routerType
+        address _from,
+        address _to,
+        uint256 _amount
     ) internal {
-        if (_path.length < 2 || _amount == 0) {
+        if (_from == _to || _amount == 0) {
             return;
         }
 
-        IERC20Upgradeable(_path[0]).safeIncreaseAllowance(_routerType, _amount);
-        IUniswapV2Router02(_routerType).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        address[] memory path = new address[](2);
+        path[0] = _from;
+        path[1] = _to;
+        IUniswapV2Router02(SPOOKY_ROUTER).swapExactTokensForTokensSupportingFeeOnTransferTokens(
             _amount,
             0,
-            _path,
+            path,
             address(this),
             block.timestamp
         );
@@ -157,41 +261,37 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      Charges fees based on the amount of WFTM gained from reward
      */
     function _chargeFees() internal {
-        IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
-        uint256 wftmFee = (wftm.balanceOf(address(this)) * totalFee) / PERCENT_DIVISOR;
-        if (wftmFee != 0) {
-            uint256 callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
-            uint256 treasuryFeeToVault = (wftmFee * treasuryFee) / PERCENT_DIVISOR;
-            uint256 feeToStrategist = (treasuryFeeToVault * strategistFee) / PERCENT_DIVISOR;
-            treasuryFeeToVault -= feeToStrategist;
+        uint256 profit = profitSinceHarvest();
+        if (profit >= minProfitToChargeFees) {
+            uint256 wftmFee = 0;
+            IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
+            if (want != WFTM) {
+                _swap(want, WFTM, profit * totalFee / PERCENT_DIVISOR);
+                wftmFee = wftm.balanceOf(address(this));
+            } else {
+                wftmFee = profit * totalFee / PERCENT_DIVISOR;
+            }
+            
+            if (wftmFee != 0) {
+                uint256 callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
+                uint256 treasuryFeeToVault = (wftmFee * treasuryFee) / PERCENT_DIVISOR;
+                uint256 feeToStrategist = (treasuryFeeToVault * strategistFee) / PERCENT_DIVISOR;
+                treasuryFeeToVault -= feeToStrategist;
 
-            wftm.safeTransfer(msg.sender, callFeeToUser);
-            wftm.safeTransfer(treasury, treasuryFeeToVault);
-            wftm.safeTransfer(strategistRemitter, feeToStrategist);
+                wftm.safeTransfer(msg.sender, callFeeToUser);
+                wftm.safeTransfer(treasury, treasuryFeeToVault);
+                wftm.safeTransfer(strategistRemitter, feeToStrategist);
+            }
+            sharePriceSnapshot = IVault(vault).getPricePerFullShare();
         }
     }
 
-    /**
-     * @dev Core harvest function. Adds more liquidity using {lpToken0} and {lpToken1}.
-     */
-    function _addLiquidity() internal {
-        // uint256 lp0Bal = IERC20Upgradeable(lpToken0).balanceOf(address(this));
-        // uint256 lp1Bal = IERC20Upgradeable(lpToken1).balanceOf(address(this));
-
-        // if (lp0Bal != 0 && lp1Bal != 0) {
-        //     IERC20Upgradeable(lpToken0).safeIncreaseAllowance(TOMB_ROUTER, lp0Bal);
-        //     IERC20Upgradeable(lpToken1).safeIncreaseAllowance(TOMB_ROUTER, lp1Bal);
-        //     IUniswapV2Router02(TOMB_ROUTER).addLiquidity(
-        //         lpToken0,
-        //         lpToken1,
-        //         lp0Bal,
-        //         lp1Bal,
-        //         0,
-        //         0,
-        //         address(this),
-        //         block.timestamp
-        //     );
-        // }
+    function updateExchangeRates() public {
+        address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < pools.length; index++) {
+            address pool = pools[index];
+            IBorrowable(pool).exchangeRate();
+        }
     }
 
     /**
@@ -199,8 +299,34 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      It takes into account both the funds in hand, plus the funds in the MasterChef.
      */
     function balanceOf() public view override returns (uint256) {
-        // (uint256 amount, ) = IMasterChef(TSHARE_REWARDS_POOL).userInfo(poolId, address(this));
-        // return amount + IERC20Upgradeable(want).balanceOf(address(this));
+        return balanceOfWant() + balanceOfPools();
+    }
+
+    function balanceOfWant() public view returns (uint256) {
+        return IERC20Upgradeable(want).balanceOf(address(this));
+    }
+
+    function balanceOfPools() public view returns (uint256) {
+        uint256 poolBalance = 0;
+        address[] memory pools = usedPools.values();
+        for (uint256 index = 0; index < pools.length; index++) {
+            poolBalance += wantSuppliedToPool(pools[index]);
+        }
+        return poolBalance;
+    }
+
+    /**
+     * @dev Returns the amount of want supplied to a lending pool.
+     */
+    function wantSuppliedToPool(address _pool) public view returns (uint256 wantBal) {
+        uint256 bTokenBalance = IBorrowable(_pool).balanceOf(address(this));
+        uint256 currentExchangeRate = IBorrowable(_pool).exchangeRateLast();
+        wantBal = bTokenBalance * currentExchangeRate / 1 ether;
+    }
+
+    function profitSinceHarvest() public view returns (uint256 profit) {
+        uint256 sharePriceChange = IVault(vault).getPricePerFullShare() - sharePriceSnapshot;
+        profit = balanceOf() * sharePriceChange / 1 ether;
     }
 
     /**
@@ -208,18 +334,23 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      Profit is denominated in WFTM, and takes fees into account.
      */
     function estimateHarvest() external view override returns (uint256 profit, uint256 callFeeToUser) {
-        // uint256 pendingReward = IMasterChef(TSHARE_REWARDS_POOL).pendingShare(poolId, address(this));
-        // uint256 totalRewards = pendingReward + IERC20Upgradeable(TSHARE).balanceOf(address(this));
-
-        // if (totalRewards != 0) {
-        //     profit += IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(totalRewards, tshareToWftmPath)[1];
-        // }
-
-        // profit += IERC20Upgradeable(WFTM).balanceOf(address(this));
-
-        // uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
-        // callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
-        // profit -= wftmFee;
+        uint256 profitInWant = profitSinceHarvest();
+        if (want != WFTM) {
+            address[] memory rewardToWftmPath = new address[](2);
+            rewardToWftmPath[0] = want;
+            rewardToWftmPath[1] = WFTM;
+            uint256[] memory amountOutMins = IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(
+                profitInWant,
+                rewardToWftmPath
+            );
+            profit += amountOutMins[1];
+        } else {
+            profit += profitInWant;
+        }
+        
+        uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
+        callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
+        profit -= wftmFee;
     }
 
     /**
@@ -230,100 +361,26 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * Note: this is not an emergency withdraw function. For that, see panic().
      */
     function _retireStrat() internal override {
-        // IMasterChef(TSHARE_REWARDS_POOL).deposit(poolId, 0); // deposit 0 to claim rewards
-
-        // uint256 tshareBal = IERC20Upgradeable(TSHARE).balanceOf(address(this));
-        // _swap(tshareBal, tshareToWftmPath, SPOOKY_ROUTER);
-
-        // uint256 wftmBal = IERC20Upgradeable(WFTM).balanceOf(address(this));
-        // _swap(wftmBal, wftmToTombPath, SPOOKY_ROUTER);
-        // uint256 tombHalf = IERC20Upgradeable(lpToken0).balanceOf(address(this)) / 2;
-        // _swap(tombHalf, tombToMaiPath, TOMB_ROUTER);
-
-        // _addLiquidity();
-
-        // (uint256 poolBal, ) = IMasterChef(TSHARE_REWARDS_POOL).userInfo(poolId, address(this));
-        // IMasterChef(TSHARE_REWARDS_POOL).withdraw(poolId, poolBal);
-
-        // uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this));
-        // IERC20Upgradeable(want).safeTransfer(vault, wantBalance);
     }
 
     /**
-     * Withdraws all funds leaving rewards behind.
+     * Withdraws all funds
      */
     function _reclaimWant() internal override {
-        // IMasterChef(TSHARE_REWARDS_POOL).emergencyWithdraw(poolId);
+        _withdrawUnderlying(type(uint256).max);
     }
 
-    // function allLendingPools(uint) external view returns (address uniswapV2Pair);
-	// function allLendingPoolsLength() external view returns (uint);
-
-    // function _processPool(address factory, address router, uint index) internal {
-    //     address poolToken = IFactory(factory).allLendingPools(index);
-
-    //     address token0 = IUniswapV2Pair(poolToken).token0();
-    //     address token1 = IUniswapV2Pair(poolToken).token1();
-
-    //     if (token0 == want || token1 == want) {
-            
-                
-    //         // (address collateral,address borrowableA,address borrowableB) = IRouter(router).getLendingPool(poolToken);
-
-    //         // console.log(IPoolToken(poolToken).name());
-    //         // string memory tokenName = IPoolToken(poolToken).name();
-    //         // console.log(poolToken);
-    //         // Filter out these tokens as they are not pool tokens but somehow are in the list
-    //         if (poolToken != address(0x84311ECC54D7553378c067282940b0fdfb913675) &&
-    //         poolToken != address(0xA48869049e36f8Bfe0Cc5cf655632626988c0140)) {
-    //             string memory token0Name = IERC20(token0).symbol();
-    //             string memory token1Name = IERC20(token1).symbol();
-    //             console.log(token0Name, "-", token1Name);
-    //             usedPools.push(poolToken);
-    //             // address underlying = IPoolToken(poolToken).underlying();
-    //             // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
-    //             // if (underlyingWantBalance > minWantInPool) {
-                    
-    //             // }
-    //         }
-
-    //         // // uint totalBalance = IPoolToken(poolToken).totalBalance();
-                
-    //         // uint underlyingWantBalance = IERC20Upgradeable(want).balanceOf(underlying);
-                
-    //         // if (underlyingWantBalance > minWantInPool) {
-    //         //     // usedPools.push(poolToken);
-    //         // }
-    //     }
-    // }
-
-    // function setUsedPools() public {
-    //     address factory = IRouter(TAROT_ROUTER).factory();
-    //     uint nrOfPools = IFactory(factory).allLendingPoolsLength();
-    //     for (uint256 index = 0; index < nrOfPools; index++) {
-    //         _processPool(factory, TAROT_ROUTER, index);
-    //     }
-
-    //     address requiemFactory = IRouter(TAROT_REQUIEM_ROUTER).factory();
-    //     nrOfPools = IFactory(requiemFactory).allLendingPoolsLength();
-
-    //     for (uint256 index = 0; index < nrOfPools; index++) {
-    //         _processPool(requiemFactory, TAROT_REQUIEM_ROUTER, index);
-    //     }
-    // }
+    /**
+     * Withdraws all funds
+     */
+    function reclaimWant() public  {
+         _onlyKeeper();
+        _reclaimWant();
+    }
 
     function addUsedPool(uint _poolIndex, RouterType _routerType) external {
-        _onlyStrategistOrOwner();
-        bool isPoolAlreadyAdded = false;
-        for (uint256 index = 0; index < usedPools.length; index++) {
-            uint currentPool = usedPools[index].poolIndex;
-            if (_poolIndex == currentPool) {
-                isPoolAlreadyAdded = true;
-                break;
-            }
-        }
-        require(!isPoolAlreadyAdded, "Pool already added");
-
+        _onlyKeeper();
+        
         address router;
 
         if (_routerType == RouterType.CLASSIC) {
@@ -334,38 +391,48 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
         address factory = IRouter(router).factory();
         address poolAddress = IFactory(factory).allLendingPools(_poolIndex);
-
-        Pool memory pool = Pool(_poolIndex, _routerType, poolAddress);
-        usedPools.push(pool);
-        pools.add(poolAddress);
+        bool isPoolAlreadyAdded = usedPools.contains(poolAddress);
+        require(!isPoolAlreadyAdded, "Pool already added");
+        require(IBorrowable(poolAddress).underlying() == want, "Pool underlying != want");
+        
+        usedPools.add(poolAddress);
     }
 
     /**
      * @dev Removes a pool that will no longer be used.
      */
-    function removeUsedPool(uint256 _poolIndex) external {
+    function removeUsedPool(address _pool) external {
         _onlyStrategistOrOwner();
-        require(usedPools.length > 1, "Must have at least 1 pool");
-        // address poolToRemove = usedPools[_poolIndex];
-        // // uint256 balance = poolxTokenBalance[poolId];
-        // // _aceLabWithdraw(poolId, balance);
-        // uint lastPoolIndex = usedPools.length - 1;
-        // address lastPool = usedPools[lastPoolIndex];
-        // usedPools[_poolIndex] = lastPool;
-        // usedPools.pop();
+        require(usedPools.length() > 1, "Must have at least 1 pool");
+        require(usedPools.contains(_pool), "Pool not used");
+        uint256 wantSupplied = wantSuppliedToPool(_pool);
+        if (wantSupplied > 0) {
+            uint256 wantAvailable = IERC20Upgradeable(want).balanceOf(_pool);
+            uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
+            uint256 ableToPullInUnderlying = MathUpgradeable.min(wantSupplied, wantAvailable);
+            uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / currentExchangeRate;
+            if (ableToPullInbToken > 0) {
+                IBorrowable(_pool).transfer(_pool, ableToPullInbToken);
+                IBorrowable(_pool).redeem(address(this));
+            }
+            wantSupplied = wantSuppliedToPool(_pool);
+        }
+        require(wantSupplied == 0, "Want is still supplied to the pool");
+        usedPools.remove(_pool);
     }
 
-    // function _isAddressTarotPool(address _pool, address _routerType) internal view returns (bool) {
-    //     address factory = IRouter(_routerType).factory();
-    //     uint nrOfPools = IFactory(factory).allLendingPoolsLength();
-    //     bool isTarotPool = false;
-    //     for (uint256 index = 0; index < nrOfPools; index++) {
-    //         address currentPool = IFactory(factory).allLendingPools(index);
-    //         if (_pool == currentPool) {
-    //             isTarotPool = true;
-    //             break;
-    //         }
-    //     }
-    //     return isTarotPool;
-    // }
+    /**
+     * @dev Only allow access to keeper and above
+     */
+    function _onlyKeeper() internal view {
+        require(hasRole(KEEPER, msg.sender) || hasRole(STRATEGIST, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not authorized");
+    }
+
+    /**
+     * @dev Sets the maximum slippage authorized when withdrawing
+     */
+    function setWithdrawSlippageTolerance(uint256 _withdrawSlippageTolerance) external {
+        _onlyStrategistOrOwner();
+        withdrawSlippageTolerance = _withdrawSlippageTolerance;
+    }
 }
