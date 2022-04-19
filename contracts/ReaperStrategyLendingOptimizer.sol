@@ -127,7 +127,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         for (uint256 index = 0; index < pools.length; index++) {
             // save some gas by storing locally
             address currentPool = pools[index];
-            IBorrowable(currentPool).exchangeRate();
+            uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
 
             // how much want our strategy has supplied to this pool
             uint256 suppliedToPool = wantSuppliedToPool(currentPool);
@@ -144,7 +144,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             }
 
             // figure out how much bToken we are able to burn from this pool for want.
-            uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / IBorrowable(currentPool).exchangeRateLast();
+            uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / exchangeRate;
 
             // check if we need to pull as much as possible from our pools
             if (_amountToWithdraw == type(uint256).max) {
@@ -164,7 +164,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
             // this is how much we need, converted to the bTokens of this specific pool. add 5 wei as a buffer for calculation losses.
             uint256 remainingbTokenNeeded =
-                remainingUnderlyingNeeded * 1 ether / IBorrowable(currentPool).exchangeRateLast() + 5;
+                remainingUnderlyingNeeded * 1 ether / exchangeRate + 5;
 
             // Withdraw all we need from the current pool if we can
             if (ableToPullInbToken > remainingbTokenNeeded) {
@@ -394,17 +394,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         bool isPoolAlreadyAdded = usedPools.contains(poolAddress);
         require(!isPoolAlreadyAdded, "Pool already added");
         require(IBorrowable(poolAddress).underlying() == want, "Pool underlying != want");
+        require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
         
         usedPools.add(poolAddress);
     }
 
-    /**
-     * @dev Removes a pool that will no longer be used.
-     */
-    function removeUsedPool(address _pool) external {
-        _onlyStrategistOrOwner();
-        require(usedPools.length() > 1, "Must have at least 1 pool");
-        require(usedPools.contains(_pool), "Pool not used");
+    function withdrawFromPool(address _pool) external returns (uint256) {
+        _onlyKeeper();
         uint256 wantSupplied = wantSuppliedToPool(_pool);
         if (wantSupplied > 0) {
             uint256 wantAvailable = IERC20Upgradeable(want).balanceOf(_pool);
@@ -417,7 +413,23 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             }
             wantSupplied = wantSuppliedToPool(_pool);
         }
-        require(wantSupplied == 0, "Want is still supplied to the pool");
+        return wantSupplied;
+    }
+
+    /**
+     * @dev Removes a pool that will no longer be used.
+     */
+    function removeUsedPool(address _pool) external {
+        _onlyKeeper();
+        require(usedPools.length() > 1, "Must have at least 1 pool");
+        require(usedPools.contains(_pool), "Pool not used");
+        if (_pool == depositPool) {
+            depositPool = usedPools.at(0);
+        }
+        require(depositPool != _pool, "Cannot remove depositPool");
+        uint256 wantSupplied = wantSuppliedToPool(_pool);
+        require(wantSupplied == 0, "Want is still supplied");
+        
         usedPools.remove(_pool);
     }
 
