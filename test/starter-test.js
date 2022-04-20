@@ -306,5 +306,39 @@ describe('Vaults', function () {
       ];
       await strategy.addUsedPools(pools);
     });
+    it('should be able to rebalance with no want', async function () {
+      const pools = [
+        {
+          routerType: 0,
+          index: 44,
+        },
+        {
+          routerType: 1,
+          index: 3,
+        },
+        {
+          routerType: 0,
+          index: 67,
+        },
+      ];
+      await strategy.addUsedPools(pools);
+      // address poolAddress;
+      //   uint allocation;
+      const poolAllocations = [
+        {
+          poolAddress: '0x33AB4Fb570509Fb102Bc51433c3D78226C2c7440',
+          allocation: ethers.BigNumber.from('824765386330558386988'),
+        },
+        {
+          poolAddress: '0xdaDB090017BA6d5d320872D96B823531f6B80A44',
+          allocation: ethers.BigNumber.from('1748728664828268489143'),
+        },
+        {
+          poolAddress: '0x488f1f90AB0AB463ceB3534612A051858C22a5a6',
+          allocation: ethers.BigNumber.from('1426505948841173123869'),
+        },
+      ];
+      await strategy.rebalance(poolAllocations);
+    });
   });
 });
