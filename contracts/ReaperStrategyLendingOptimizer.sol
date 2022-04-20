@@ -89,8 +89,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 wantBalance = balanceOfWant();
         if (wantBalance != 0) {
             IERC20Upgradeable(want).safeTransfer(depositPool, wantBalance);
-            uint256 minted = IBorrowable(depositPool).mint(address(this));
-            require(minted != 0, "Cannot mint 0");
+            IBorrowable(depositPool).mint(address(this));
         }
     }
 
@@ -181,16 +180,14 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             uint allocation = _allocations[index].allocation;
             uint depositAmount = MathUpgradeable.min(wantAvailable, allocation);
             IERC20Upgradeable(want).safeTransfer(pool, depositAmount);
-            uint256 minted = IBorrowable(pool).mint(address(this));
-            require(minted != 0, "Cannot mint 0");
+            IBorrowable(pool).mint(address(this));
             console.log("balanceOfWant()", balanceOfWant());
             console.log("balanceOfPools()", balanceOfPools());
         }
         uint256 wantBalance = balanceOfWant();
         if (wantBalance > minWantToDepositOrWithdraw) {
             IERC20Upgradeable(want).safeTransfer(depositPool, wantBalance);
-            uint256 minted = IBorrowable(depositPool).mint(address(this));
-            require(minted != 0, "Cannot mint 0");
+            IBorrowable(depositPool).mint(address(this));
         }
         console.log("balanceOfWant()", balanceOfWant());
         console.log("balanceOfPools()", balanceOfPools());
