@@ -159,7 +159,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         return withdrawn;
     }
 
-    function rebalance(PoolAllocation[] memory _allocations) external {
+    function rebalance(PoolAllocation[] calldata _allocations) external {
         _onlyKeeper();
         console.log("rebalance()");
         console.log("balanceOfWant()", balanceOfWant());
@@ -385,7 +385,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _reclaimWant();
     }
 
-    function addUsedPools(RouterPool[] memory _poolsToAdd) external {
+    function addUsedPools(RouterPool[] calldata _poolsToAdd) external {
         _onlyKeeper();
         uint256 nrOfPools = _poolsToAdd.length;
         for (uint256 index = 0; index < nrOfPools; index++) {
@@ -417,17 +417,16 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         console.log("lp1: ", lp1);
         bool containsWant = lp0 == want || lp1 == want;
         require(containsWant, "Pool does not contain want");
+        require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
         (,,,address borrowable0, address borrowable1) = IFactory(factory).getLendingPool(lpAddress);
         address poolAddress = lp0 == want ? borrowable0 : borrowable1;
-        bool isPoolAlreadyAdded = usedPools.contains(poolAddress);
-        require(!isPoolAlreadyAdded, "Pool already added");
-        require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
-        
-        usedPools.add(poolAddress);
+        bool addedPool = usedPools.add(poolAddress);
+        require(addedPool, "Pool already added");
     }
 
     function withdrawFromPool(address _pool) external returns (uint256) {
         _onlyKeeper();
+        require(usedPools.contains(_pool), "Pool not used");
         console.log("withdrawFromPool()");
         uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
         uint256 wantSupplied = wantSuppliedToPool(_pool);
@@ -456,11 +455,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function removeUsedPool(address _pool) external {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
-        require(usedPools.contains(_pool), "Pool not used");
         uint256 wantSupplied = wantSuppliedToPool(_pool);
         require(wantSupplied < minWantToRemovePool, "Want is still supplied"); // should there be a min that we don't care about? like 10^5 or something
         
-        usedPools.remove(_pool);
+        bool removedPool = usedPools.remove(_pool);
+        require(removedPool, "Pool not used");
         if (_pool == depositPool) {
             depositPool = usedPools.at(0);
         }
