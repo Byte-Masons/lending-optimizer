@@ -104,7 +104,7 @@ abstract contract ReaperBaseStrategyv2 is
         callFee = 1000;
         treasuryFee = 9000;
         strategistFee = 2500;
-        securityFee = 10;
+        securityFee = 0;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         clearUpgradeCooldown();

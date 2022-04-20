@@ -221,7 +221,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      Charges fees based on the amount of WFTM gained from reward
      */
     function _chargeFees() internal { // planning to call this from withdraw as well?
+        console.log("_chargeFees()");
         uint256 profit = profitSinceHarvest();
+        console.log("profit: ", profit);
         if (profit >= minProfitToChargeFees) {
             uint256 wftmFee = 0;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
@@ -231,8 +233,16 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             } else {
                 wftmFee = profit * totalFee / PERCENT_DIVISOR;
             }
+            console.log("wftmFee: ", wftmFee);
             
             if (wftmFee != 0) {
+                uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
+                if (wantBal < wftmFee) {
+                    uint256 withdrawn = _withdrawUnderlying(wftmFee - wantBal);
+                    if (withdrawn + wantBal < wftmFee) {
+                        wftmFee = withdrawn + wantBal;
+                    }
+                }
                 uint256 callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
                 uint256 treasuryFeeToVault = (wftmFee * treasuryFee) / PERCENT_DIVISOR;
                 uint256 feeToStrategist = (treasuryFeeToVault * strategistFee) / PERCENT_DIVISOR;
@@ -285,7 +295,15 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     function profitSinceHarvest() public view returns (uint256 profit) {
-        uint256 sharePriceChange = IVault(vault).getPricePerFullShare() - sharePriceSnapshot;
+        uint256 ppfs = IVault(vault).getPricePerFullShare();
+        console.log("profitSinceHarvest()");
+        console.log("ppfs: ", ppfs);
+        console.log("sharePriceSnapshot: ", sharePriceSnapshot);
+        if (ppfs <= sharePriceSnapshot) {
+            return 0;
+        }
+        uint256 sharePriceChange = ppfs - sharePriceSnapshot;
+        console.log("sharePriceChange: ", sharePriceChange);
         profit = balanceOf() * sharePriceChange / 1 ether;
     }
 
