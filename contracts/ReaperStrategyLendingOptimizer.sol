@@ -14,8 +14,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @dev Deposits want in Tarot lending pools for the highest APRs.
  */
@@ -75,7 +73,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
-        withdrawSlippageTolerance = 50;
+        withdrawSlippageTolerance = 10;
         minProfitToChargeFees = 1000;
         minWantToDepositOrWithdraw = 10;
         minWantToRemovePool = 100;
@@ -118,6 +116,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         IERC20Upgradeable(want).safeTransfer(vault, _amount);
     }
 
+    /**
+     * @dev Withdraws a given amount by looping through all lending pools until enough want has been withdrawn
+     */
     function _withdrawUnderlying(uint256 _amountToWithdraw) internal returns (uint256) {
         uint256 remainingUnderlyingNeeded = _amountToWithdraw;
         uint256 withdrawn = 0;
@@ -125,17 +126,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 nrOfPools = usedPools.length();
         for (uint256 index = 0; index < nrOfPools; index++) {
             address currentPool = usedPools.at(index);
-            console.log("currentPool: ", currentPool);
             uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
 
             uint256 suppliedToPool = wantSuppliedToPool(currentPool);
-            console.log("suppliedToPool: ", suppliedToPool);
 
             uint256 poolAvailableWant = IERC20Upgradeable(want).balanceOf(currentPool);
 
             uint256 ableToPullInUnderlying = MathUpgradeable.min(suppliedToPool, poolAvailableWant);
-            console.log("ableToPullInUnderlying: ", ableToPullInUnderlying);
-            console.log("remainingUnderlyingNeeded: ", remainingUnderlyingNeeded);
 
             uint256 underlyingToWithdraw = MathUpgradeable.min(remainingUnderlyingNeeded, ableToPullInUnderlying);
 
@@ -144,8 +141,6 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             }
 
             uint256 bTokenToWithdraw = underlyingToWithdraw * 1 ether / exchangeRate;
-            console.log("underlyingToWithdraw: ", underlyingToWithdraw);
-            console.log("bTokenToWithdraw: ", bTokenToWithdraw);
 
             IBorrowable(currentPool).transfer(currentPool, bTokenToWithdraw);
             withdrawn += IBorrowable(currentPool).redeem(address(this));
@@ -159,11 +154,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         return withdrawn;
     }
 
+    /**
+     * @dev Takes a list of pool allocations and deposits into the lending pools accordingly
+     */
     function rebalance(PoolAllocation[] calldata _allocations) external {
         _onlyKeeper();
-        console.log("rebalance()");
-        console.log("balanceOfWant()", balanceOfWant());
-        console.log("balanceOfPools()", balanceOfPools());
         uint256 nrOfAllocations = _allocations.length;
         for (uint256 index = 0; index < nrOfAllocations; index++) {
             address pool = _allocations[index].poolAddress;
@@ -182,16 +177,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             uint depositAmount = MathUpgradeable.min(wantAvailable, allocation);
             IERC20Upgradeable(want).safeTransfer(pool, depositAmount);
             IBorrowable(pool).mint(address(this));
-            console.log("balanceOfWant()", balanceOfWant());
-            console.log("balanceOfPools()", balanceOfPools());
         }
         uint256 wantBalance = balanceOfWant();
         if (wantBalance > minWantToDepositOrWithdraw) {
             IERC20Upgradeable(want).safeTransfer(depositPool, wantBalance);
             IBorrowable(depositPool).mint(address(this));
         }
-        console.log("balanceOfWant()", balanceOfWant());
-        console.log("balanceOfPools()", balanceOfPools());
     }
 
     /**
@@ -231,11 +222,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * @dev Core harvest function.
      *      Charges fees based on the amount of WFTM gained from reward
      */
-    function _chargeFees() internal { // planning to call this from withdraw as well?
-        console.log("_chargeFees()");
+    function _chargeFees() internal {
         updateExchangeRates();
         uint256 profit = profitSinceHarvest();
-        console.log("profit: ", profit);
         if (profit >= minProfitToChargeFees) {
             uint256 wftmFee = 0;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
@@ -245,7 +234,6 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
             } else {
                 wftmFee = profit * totalFee / PERCENT_DIVISOR;
             }
-            console.log("wftmFee: ", wftmFee);
             
             if (wftmFee != 0) {
                 uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
@@ -268,6 +256,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         }
     }
 
+    /**
+     * @dev Updates the borrowable exchangerate to update the interest earned
+     */
     function updateExchangeRates() public {
         uint256 nrOfPools = usedPools.length();
         for (uint256 index = 0; index < nrOfPools; index++) {
@@ -278,16 +269,22 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
     /**
      * @dev Function to calculate the total {want} held by the strat.
-     *      It takes into account both the funds in hand, plus the funds in the MasterChef.
+     *      It takes into account both the funds in hand, plus the funds in the lending pools.
      */
     function balanceOf() public view override returns (uint256) {
         return balanceOfWant() + balanceOfPools();
     }
 
+    /**
+     * @dev Returns the amount of want available in the strategy
+     */
     function balanceOfWant() public view returns (uint256) {
         return IERC20Upgradeable(want).balanceOf(address(this));
     }
 
+    /**
+     * @dev Returns the amount of want supplied to all lending pools
+     */
     function balanceOfPools() public view returns (uint256) {
         uint256 poolBalance = 0;
         uint256 nrOfPools = usedPools.length();
@@ -297,6 +294,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         return poolBalance;
     }
 
+    /**
+     * @dev Returns the amount of want supplied to each specific pool
+     */
     function getPoolBalances() external view returns (PoolAllocation[] memory) {
         uint256 nrOfPools = usedPools.length();
         PoolAllocation[] memory poolBalances = new PoolAllocation[](nrOfPools);
@@ -319,16 +319,15 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         wantBal = bTokenBalance * currentExchangeRate / 1 ether;
     }
 
+    /**
+     * @dev Returns the approx amount of profit in want since latest harvest
+     */
     function profitSinceHarvest() public view returns (uint256 profit) {
         uint256 ppfs = IVault(vault).getPricePerFullShare();
-        console.log("profitSinceHarvest()");
-        console.log("ppfs: ", ppfs);
-        console.log("sharePriceSnapshot: ", sharePriceSnapshot);
         if (ppfs <= sharePriceSnapshot) {
             return 0;
         }
         uint256 sharePriceChange = ppfs - sharePriceSnapshot;
-        console.log("sharePriceChange: ", sharePriceChange);
         profit = balanceOf() * sharePriceChange / 1 ether;
     }
 
@@ -365,7 +364,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function _retireStrat() internal override {
         uint256 suppliedBalance = balanceOfPools();
-        require(suppliedBalance <= minWantToRemovePool, "Want still supplied to pools");
+        if (suppliedBalance <= minWantToRemovePool) {
+            reclaimWant();
+            suppliedBalance = balanceOfPools();
+            require(suppliedBalance <= minWantToRemovePool, "Want still supplied to pools");
+        }
         uint256 wantBalance = balanceOfWant();
         IERC20Upgradeable(want).safeTransfer(vault, wantBalance);
     }
@@ -385,6 +388,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _reclaimWant();
     }
 
+    /**
+     * @dev Adds multiple pools at once
+     */
     function addUsedPools(RouterPool[] calldata _poolsToAdd) external {
         _onlyKeeper();
         uint256 nrOfPools = _poolsToAdd.length;
@@ -394,27 +400,24 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         }
     }
 
+    /**
+     * @dev Adds a new pool using the Tarot factory index (to ensure only Tarot pools can be added)
+     */
     function addUsedPool(uint _poolIndex, RouterType _routerType) public {
         _onlyKeeper();
         
         address router;
-        console.log("_poolIndex: ", _poolIndex);
-        console.log("_routerType: ", uint(_routerType));
 
         if (_routerType == RouterType.CLASSIC) {
             router = TAROT_ROUTER;
         } else if (_routerType == RouterType.REQUIEM) {
             router = TAROT_REQUIEM_ROUTER;
         }
-        console.log("router: ", router);
 
         address factory = IRouter(router).factory();
         address lpAddress = IFactory(factory).allLendingPools(_poolIndex);
-        console.log("lpAddress: ", lpAddress);
         address lp0 = IUniswapV2Pair(lpAddress).token0();
         address lp1 = IUniswapV2Pair(lpAddress).token1();
-        console.log("lp0: ", lp0);
-        console.log("lp1: ", lp1);
         bool containsWant = lp0 == want || lp1 == want;
         require(containsWant, "Pool does not contain want");
         require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
@@ -424,27 +427,24 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         require(addedPool, "Pool already added");
     }
 
+    /**
+     * @dev Attempts to remove all want supplied to a pool, returns the amount left
+     */
     function withdrawFromPool(address _pool) external returns (uint256) {
         _onlyKeeper();
         require(usedPools.contains(_pool), "Pool not used");
-        console.log("withdrawFromPool()");
         uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
         uint256 wantSupplied = wantSuppliedToPool(_pool);
-        console.log("wantSupplied: ", wantSupplied);
         if (wantSupplied != 0) { // if (wantSupplied > 1e5) could probably make the min value configurable
             uint256 wantAvailable = IERC20Upgradeable(want).balanceOf(_pool);
-            console.log("wantAvailable: ", wantAvailable);
             
             uint256 ableToPullInUnderlying = MathUpgradeable.min(wantSupplied, wantAvailable);
-            console.log("ableToPullInUnderlying: ", ableToPullInUnderlying);
             uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / currentExchangeRate;
-            console.log("ableToPullInbToken: ", ableToPullInbToken);
             if (ableToPullInbToken != 0) {
                 IBorrowable(_pool).transfer(_pool, ableToPullInbToken);
                 IBorrowable(_pool).redeem(address(this));
             }
             wantSupplied = wantSuppliedToPool(_pool);
-            console.log("wantSupplied: ", wantSupplied);
         }
         return wantSupplied;
     }
