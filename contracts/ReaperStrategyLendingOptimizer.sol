@@ -31,6 +31,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint index;
     }
 
+    enum RouterType{ CLASSIC, REQUIEM }
+
     /**
      * Reaper Roles
      */
@@ -51,10 +53,17 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
     /**
      * @dev Tarot variables
+     * {usedPools} - A set of pool addresses which are the authorized lending pools that can be used
+     * {MAX_POOLS} - Sets the maximum amount of pools that can be added
+     * {depositPool} - Address of the pool that regular deposits will go to
+     * {sharePriceSnapshot} - Saves the pricePerFullShare to be compared between harvests to calculate profit
+     * {minProfitToChargeFees} - The minimum amount of profit for harvest to charge fees
+     * {withdrawSlippageTolerance} - Allows some very small slippage on withdraws to avoid reverts
+     * {minWantToDepositOrWithdraw} - A minimum amount to deposit or withdraw from a pool (to save gas on very small amounts)
+     * {minWantToRemovePool} - Sets the allowed amount for a pool to have and still be removable (which will loose those funds)
      */
     EnumerableSetUpgradeable.AddressSet private usedPools;
     uint constant public MAX_POOLS = 20;
-    enum RouterType{ CLASSIC, REQUIEM }
     address public depositPool;
     uint256 public sharePriceSnapshot;
     uint256 public minProfitToChargeFees;
