@@ -28,7 +28,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint allocation;
     }
 
-    struct Pool {
+    struct RouterPool {
         RouterType routerType;
         uint index;
     }
@@ -122,8 +122,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 remainingUnderlyingNeeded = _amountToWithdraw;
         uint256 withdrawn = 0;
 
-        // address[] memory pools = usedPools.values();
-        for (uint256 index = 0; index < usedPools.length(); index++) {
+        uint256 nrOfPools = usedPools.length();
+        for (uint256 index = 0; index < nrOfPools; index++) {
             address currentPool = usedPools.at(index);
             console.log("currentPool: ", currentPool);
             uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
@@ -164,7 +164,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         console.log("rebalance()");
         console.log("balanceOfWant()", balanceOfWant());
         console.log("balanceOfPools()", balanceOfPools());
-        for (uint256 index = 0; index < _allocations.length; index++) {
+        uint256 nrOfAllocations = _allocations.length;
+        for (uint256 index = 0; index < nrOfAllocations; index++) {
             address pool = _allocations[index].poolAddress;
             require(usedPools.contains(pool), "Pool is not authorized");
             
@@ -268,7 +269,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     function updateExchangeRates() public {
-        for (uint256 index = 0; index < usedPools.length(); index++) {
+        uint256 nrOfPools = usedPools.length();
+        for (uint256 index = 0; index < nrOfPools; index++) {
             address pool = usedPools.at(index);
             IBorrowable(pool).exchangeRate();
         }
@@ -288,10 +290,24 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
     function balanceOfPools() public view returns (uint256) {
         uint256 poolBalance = 0;
-        for (uint256 index = 0; index < usedPools.length(); index++) {
+        uint256 nrOfPools = usedPools.length();
+        for (uint256 index = 0; index < nrOfPools; index++) {
             poolBalance += wantSuppliedToPool(usedPools.at(index));
         }
         return poolBalance;
+    }
+
+    function getPoolBalances() external view returns (PoolAllocation[] memory) {
+        uint256 nrOfPools = usedPools.length();
+        PoolAllocation[] memory poolBalances = new PoolAllocation[](nrOfPools);
+        
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address poolAddress = usedPools.at(index);
+            uint256 wantInPool = wantSuppliedToPool(poolAddress);
+            PoolAllocation memory poolBalance = PoolAllocation(poolAddress, wantInPool);
+            poolBalances[index] = (poolBalance);
+        }
+        return poolBalances;
     }
 
     /**
@@ -369,10 +385,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _reclaimWant();
     }
 
-    function addUsedPools(Pool[] memory _poolsToAdd) external {
+    function addUsedPools(RouterPool[] memory _poolsToAdd) external {
         _onlyKeeper();
-        for (uint256 index = 0; index < _poolsToAdd.length; index++) {
-            Pool memory pool = _poolsToAdd[index];
+        uint256 nrOfPools = _poolsToAdd.length;
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            RouterPool memory pool = _poolsToAdd[index];
             addUsedPool(pool.index, pool.routerType);
         }
     }
@@ -411,17 +428,24 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
 
     function withdrawFromPool(address _pool) external returns (uint256) {
         _onlyKeeper();
+        console.log("withdrawFromPool()");
+        uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
         uint256 wantSupplied = wantSuppliedToPool(_pool);
+        console.log("wantSupplied: ", wantSupplied);
         if (wantSupplied != 0) { // if (wantSupplied > 1e5) could probably make the min value configurable
             uint256 wantAvailable = IERC20Upgradeable(want).balanceOf(_pool);
-            uint256 currentExchangeRate = IBorrowable(_pool).exchangeRate();
+            console.log("wantAvailable: ", wantAvailable);
+            
             uint256 ableToPullInUnderlying = MathUpgradeable.min(wantSupplied, wantAvailable);
+            console.log("ableToPullInUnderlying: ", ableToPullInUnderlying);
             uint256 ableToPullInbToken = ableToPullInUnderlying * 1 ether / currentExchangeRate;
+            console.log("ableToPullInbToken: ", ableToPullInbToken);
             if (ableToPullInbToken != 0) {
                 IBorrowable(_pool).transfer(_pool, ableToPullInbToken);
                 IBorrowable(_pool).redeem(address(this));
             }
             wantSupplied = wantSuppliedToPool(_pool);
+            console.log("wantSupplied: ", wantSupplied);
         }
         return wantSupplied;
     }

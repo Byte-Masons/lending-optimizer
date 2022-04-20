@@ -240,7 +240,7 @@ describe('Vaults', function () {
       await strategy.harvest();
     });
 
-    it('should provide yield', async function () {
+    xit('should provide yield', async function () {
       const timeToSkip = 3600;
       const initialUserBalance = await want.balanceOf(wantHolderAddr);
       const depositAmount = toWantUnit('4000');
@@ -261,7 +261,7 @@ describe('Vaults', function () {
       }
 
       const finalVaultBalance = await vault.balance();
-      //expect(finalVaultBalance).to.be.gt(initialVaultBalance);
+      expect(finalVaultBalance).to.be.gt(initialVaultBalance);
 
       const averageAPR = await strategy.averageAPRAcrossLastNHarvests(numHarvests);
       console.log(`Average APR across ${numHarvests} harvests is ${averageAPR} basis points.`);
@@ -296,6 +296,8 @@ describe('Vaults', function () {
       const strategyBalance = await strategy.balanceOf();
       expect(vaultBalance).to.equal(strategyBalance);
 
+      await strategy.reclaimWant();
+
       await expect(strategy.retireStrat()).to.not.be.reverted;
       const newVaultBalance = await vault.balance();
       const newStrategyBalance = await strategy.balanceOf();
@@ -314,16 +316,13 @@ describe('Vaults', function () {
       await moveBlocksForward(100);
       await strategy.harvest();
       await moveBlocksForward(100);
+      await strategy.updateExchangeRates();
       const [profit, callFeeToUser] = await strategy.estimateHarvest();
       console.log(`profit: ${profit}`);
       const hasProfit = profit.gt(0);
       const hasCallFee = callFeeToUser.gt(0);
       expect(hasProfit).to.equal(true);
       expect(hasCallFee).to.equal(true);
-    });
-
-    xit('should be able to get lending pools', async function () {
-      await strategy.setUsedPools();
     });
     xit('should be able to add a pool', async function () {
       const poolIndex = 0;
@@ -336,6 +335,21 @@ describe('Vaults', function () {
     xit('should be able to rebalance with no want', async function () {
       await addUsedPools();
       await rebalance();
+    });
+    it('should be able to remove a pool', async function () {
+      const depositAmount = toWantUnit('4000');
+      await vault.connect(wantHolder).deposit(depositAmount);
+      await strategy.reclaimWant();
+      await rebalance(strategy);
+      const poolBalances = await strategy.getPoolBalances();
+      console.log(poolBalances[0].allocation);
+      // Make sure pool has a balance to begin with to test withdraw + remove pool
+      expect(poolBalances[0].allocation.gt(0)).to.equal(true);
+      const poolAddress = poolBalances[0].poolAddress;
+      await strategy.withdrawFromPool(poolAddress);
+      const newBalance = await strategy.wantSuppliedToPool(poolAddress);
+      console.log(`newBalance: ${newBalance}`);
+      await expect(strategy.removeUsedPool(poolAddress)).to.not.be.reverted;
     });
   });
 });
