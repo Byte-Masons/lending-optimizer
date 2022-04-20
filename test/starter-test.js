@@ -28,7 +28,7 @@ const addUsedPools = async (strategy) => {
   const pools = [
     {
       routerType: 1,
-      index: 11,
+      index: 3,
     },
     {
       routerType: 1,
@@ -39,12 +39,8 @@ const addUsedPools = async (strategy) => {
       index: 84,
     },
     {
-      routerType: 0,
-      index: 44,
-    },
-    {
-      routerType: 0,
-      index: 78,
+      routerType: 1,
+      index: 21,
     },
   ];
   await strategy.addUsedPools(pools);
@@ -53,24 +49,20 @@ const addUsedPools = async (strategy) => {
 const rebalance = async (strategy) => {
   const poolAllocations = [
     {
-      poolAddress: '0x47Bd57DAe9d57d3De292B236BC0C748335488327',
-      allocation: ethers.BigNumber.from('1551037336548871954903'),
+      poolAddress: '0x02ABD28Ac6C7161aa556A2e5DC9Bea54896695C9',
+      allocation: ethers.BigNumber.from('654925862235622915903'),
     },
     {
       poolAddress: '0xBC05B4834FEDb1c74DF54777C4439023c0DF4534',
-      allocation: ethers.BigNumber.from('90031062483563247665'),
+      allocation: ethers.BigNumber.from('65391926615092011295'),
     },
     {
       poolAddress: '0xcdE8E796038373Ff030B56c9717757d293B703eb',
-      allocation: ethers.BigNumber.from('207448123179838794402'),
+      allocation: ethers.BigNumber.from('180955769831347900205'),
     },
     {
-      poolAddress: '0x5A88f89fCc6827a1572D0EFA32b82C69700aA7a0',
-      allocation: ethers.BigNumber.from('1405076203769947264267'),
-    },
-    {
-      poolAddress: '0xEB0908108fF291C8B4e51dFd90af0D7Ab9884B1f',
-      allocation: ethers.BigNumber.from('746407274017778738763'),
+      poolAddress: '0x7b0D24741d85C6733D10ED59b22335FbB3ADA32E',
+      allocation: ethers.BigNumber.from('3098726441317937172597'),
     },
   ];
   await strategy.rebalance(poolAllocations);
@@ -105,7 +97,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 36478050,
+            blockNumber: 36517721,
           },
         },
       ],
@@ -255,12 +247,15 @@ describe('Vaults', function () {
 
       await vault.connect(wantHolder).deposit(depositAmount);
       const initialVaultBalance = await vault.balance();
+      await strategy.reclaimWant();
+      await rebalance(strategy);
 
       await strategy.updateHarvestLogCadence(1);
 
       const numHarvests = 5;
       for (let i = 0; i < numHarvests; i++) {
         await moveTimeForward(timeToSkip);
+        await moveBlocksForward(100);
         await strategy.updateExchangeRates();
         await strategy.harvest();
       }
