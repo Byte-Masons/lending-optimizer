@@ -114,11 +114,11 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         }
 
         if(_amount < initialWithdrawAmount) {
-            require(
-                _amount >=
-                    (initialWithdrawAmount *
+            uint256 lowestAcceptableWithdrawAmount = (initialWithdrawAmount *
                         (PERCENT_DIVISOR - withdrawSlippageTolerance)) /
-                        PERCENT_DIVISOR
+                        PERCENT_DIVISOR;
+            require(
+                _amount >= lowestAcceptableWithdrawAmount
             );
         }
 
