@@ -304,6 +304,52 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
+     * @dev Returns the address for all the currently used pools
+     */
+    function getUsedPools() external view returns (address[] memory) {
+        uint256 nrOfPools = usedPools.length();
+        address[] memory pools = new address[](nrOfPools);
+
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address poolAddress = usedPools.at(index);
+            pools[index] = poolAddress;
+        }
+        return pools;
+    }
+
+    /**
+     * @dev Returns the balance supplied to each pool
+     */
+    function getSuppliedToPools() external view returns (uint256[] memory) {
+        uint256 nrOfPools = usedPools.length();
+        uint256[] memory supplied = new uint256[](nrOfPools);
+
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address poolAddress = usedPools.at(index);
+            uint256 suppliedToPool = wantSuppliedToPool(poolAddress);
+            supplied[index] = suppliedToPool;
+        }
+        return supplied;
+    }
+
+    /**
+     * @dev Returns the total withdrawable balance from all pools
+     */
+    function getAvailableBalance() external view returns (uint256) {
+        uint256 nrOfPools = usedPools.length();
+        uint256 availableBalance = 0;
+
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address poolAddress = usedPools.at(index);
+            uint256 suppliedToPool = wantSuppliedToPool(poolAddress);
+            uint256 poolAvailableWant = IERC20Upgradeable(want).balanceOf(poolAddress);
+
+            availableBalance += MathUpgradeable.min(suppliedToPool, poolAvailableWant);
+        }
+        return availableBalance;
+    }
+
+    /**
      * @dev Returns the amount of want supplied to each specific pool
      */
     function getPoolBalances() external view returns (PoolAllocation[] memory) {
