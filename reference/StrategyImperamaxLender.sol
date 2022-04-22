@@ -323,7 +323,11 @@ contract StrategyImperamaxLender is BaseStrategy {
         }
     }
 
-    function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
+    function liquidatePosition(uint256 _amountNeeded)
+        internal
+        override
+        returns (uint256 _liquidatedAmount, uint256 _loss)
+    {
         uint256 _wantBal = balanceOfWant();
         if (_amountNeeded > _wantBal) {
             // check if we have enough free funds to cover the withdrawal
@@ -371,10 +375,16 @@ contract StrategyImperamaxLender is BaseStrategy {
             }
 
             // figure out how much bToken we are able to burn from this pool for want.
-            uint256 ableToPullInbToken = ableToPullInUnderlying.mul(BTOKEN_DECIMALS).div(IBorrowable(currentPool).exchangeRateLast());
+            uint256 ableToPullInbToken = ableToPullInUnderlying.mul(BTOKEN_DECIMALS).div(
+                IBorrowable(currentPool).exchangeRateLast()
+            );
 
             // check if we need to pull as much as possible from our pools
-            if (params.debtRatio == 0 || _amountToWithdraw == type(uint256).max || vaultAPIExtended(address(vault)).emergencyShutdown()) {
+            if (
+                params.debtRatio == 0 ||
+                _amountToWithdraw == type(uint256).max ||
+                vaultAPIExtended(address(vault)).emergencyShutdown()
+            ) {
                 // this is for withdrawing the maximum we safely can
                 if (PoolLiquidity > suppliedToPool) {
                     // if possible, burn our whole bToken position to avoid dust
@@ -390,8 +400,10 @@ contract StrategyImperamaxLender is BaseStrategy {
             }
 
             // this is how much we need, converted to the bTokens of this specific pool. add 5 wei as a buffer for calculation losses.
-            uint256 remainingbTokenNeeded =
-                remainingUnderlyingNeeded.mul(BTOKEN_DECIMALS).div(IBorrowable(currentPool).exchangeRateLast()).add(5);
+            uint256 remainingbTokenNeeded = remainingUnderlyingNeeded
+                .mul(BTOKEN_DECIMALS)
+                .div(IBorrowable(currentPool).exchangeRateLast())
+                .add(5);
 
             // Withdraw all we need from the current pool if we can
             if (ableToPullInbToken > remainingbTokenNeeded) {
