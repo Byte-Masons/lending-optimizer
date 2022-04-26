@@ -29,4 +29,13 @@ interface IStrategy {
 
     //unpauses deposits and maxes out allowances again
     function unpause() external;
+
+    // Updates the Tarot borrowable exchange rates (accrues intrest)
+    function updateExchangeRates() external;
+
+    // If harvest should be called when depositing, controlled by governance
+    function shouldHarvestOnDeposit() external returns (bool);
+
+    // If harvest should be called when withdrawing, controlled by governance
+    function shouldHarvestOnWithdraw() external returns (bool);
 }

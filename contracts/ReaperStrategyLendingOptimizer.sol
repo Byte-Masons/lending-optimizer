@@ -57,7 +57,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     /**
      * @dev Tarot variables
      * {usedPools} - A set of pool addresses which are the authorized lending pools that can be used
-     * {MAX_POOLS} - Sets the maximum amount of pools that can be added
+     * {maxPools} - Sets the maximum amount of pools that can be added
      * {depositPool} - Address of the pool that regular deposits will go to
      * {sharePriceSnapshot} - Saves the pricePerFullShare to be compared between harvests to calculate profit
      * {minProfitToChargeFees} - The minimum amount of profit for harvest to charge fees
@@ -66,13 +66,15 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {minWantToRemovePool} - Sets the allowed amount for a pool to have and still be removable (which will loose those funds)
      */
     EnumerableSetUpgradeable.AddressSet private usedPools;
-    uint256 public constant MAX_POOLS = 20;
+    uint256 public maxPools;
     address public depositPool;
     uint256 public sharePriceSnapshot;
     uint256 public minProfitToChargeFees;
     uint256 public withdrawSlippageTolerance;
     uint256 public minWantToDepositOrWithdraw;
     uint256 public minWantToRemovePool;
+    bool public shouldHarvestOnDeposit;
+    bool public shouldHarvestOnWithdraw;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -81,14 +83,21 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function initialize(
         address _vault,
         address[] memory _feeRemitters,
-        address[] memory _strategists
+        address[] memory _strategists,
+        uint256 _initialPoolIndex,
+        RouterType _routerType
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
+        maxPools = 40;
         withdrawSlippageTolerance = 10;
-        minProfitToChargeFees = 1000;
+        minProfitToChargeFees = 1e16;
         minWantToDepositOrWithdraw = 10;
         minWantToRemovePool = 100;
+        addUsedPool(_initialPoolIndex, _routerType);
+        depositPool = usedPools.at(0); // Guarantees depositPool is always a Tarot pool
+        shouldHarvestOnDeposit = true;
+        shouldHarvestOnWithdraw = true;
     }
 
     /**
@@ -168,6 +177,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function rebalance(PoolAllocation[] calldata _allocations) external {
         _onlyKeeper();
+        _reclaimWant(); // Withdraw old deposits to deposit the new allocation
         uint256 nrOfAllocations = _allocations.length;
         for (uint256 index = 0; index < nrOfAllocations; index++) {
             address pool = _allocations[index].poolAddress;
@@ -235,14 +245,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         updateExchangeRates();
         uint256 profit = profitSinceHarvest();
         if (profit >= minProfitToChargeFees) {
-            uint256 wftmFee = 0;
+            uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
-            if (want != WFTM) {
-                _swap(want, WFTM, (profit * totalFee) / PERCENT_DIVISOR);
-                wftmFee = wftm.balanceOf(address(this));
-            } else {
-                wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
-            }
 
             if (wftmFee != 0) {
                 uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
@@ -475,7 +479,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         address lp1 = IUniswapV2Pair(lpAddress).token1();
         bool containsWant = lp0 == want || lp1 == want;
         require(containsWant, "Pool does not contain want");
-        require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
+        require(usedPools.length() < maxPools, "Reached max nr of pools");
         (, , , address borrowable0, address borrowable1) = IFactory(factory).getLendingPool(lpAddress);
         address poolAddress = lp0 == want ? borrowable0 : borrowable1;
         bool addedPool = usedPools.add(poolAddress);
@@ -505,13 +509,25 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
+     * @dev Removes a list of pools.
+     */
+    function removeUsedPools(address[] calldata _poolsToRemove) external {
+        _onlyKeeper();
+        uint256 nrOfPools = _poolsToRemove.length;
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address pool = _poolsToRemove[index];
+            removeUsedPool(pool);
+        }
+    }
+
+    /**
      * @dev Removes a pool that will no longer be used.
      */
-    function removeUsedPool(address _pool) external {
+    function removeUsedPool(address _pool) public {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
         uint256 wantSupplied = wantSuppliedToPool(_pool);
-        require(wantSupplied < minWantToRemovePool, "Want is still supplied"); // should there be a min that we don't care about? like 10^5 or something
+        require(wantSupplied < minWantToRemovePool, "Want is still supplied");
 
         bool removedPool = usedPools.remove(_pool);
         require(removedPool, "Pool not used");
@@ -560,5 +576,29 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function setMinWantToRemovePool(uint256 _minWantToRemovePool) external {
         _onlyStrategistOrOwner();
         minWantToRemovePool = _minWantToRemovePool;
+    }
+    
+    /**
+     * @dev Sets the maximum amount of pools that can be used at any time
+     */
+    function setMaxPools(uint256 _maxPools) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_maxPools != 0 && _maxPools <= 100, "Invalid nr of pools");
+        maxPools = _maxPools;
+    }
+
+    /**
+     * @dev Sets if harvests should be done when depositing
+     */
+    function setShouldHarvestOnDeposit(bool _shouldHarvestOnDeposit) external {
+        _onlyStrategistOrOwner();
+        shouldHarvestOnDeposit = _shouldHarvestOnDeposit;
+    }
+
+    /**
+     * @dev Sets if harvests should be done when withdrawing
+     */
+    function setShouldHarvestOnWithdraw(bool _shouldHarvestOnWithdraw) external {
+        _onlyStrategistOrOwner();
+        shouldHarvestOnWithdraw = _shouldHarvestOnWithdraw;
     }
 }
