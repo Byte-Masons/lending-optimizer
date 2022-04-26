@@ -74,6 +74,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     uint256 public minWantToDepositOrWithdraw;
     uint256 public minWantToRemovePool;
     bool public shouldHarvestOnDeposit;
+    bool public shouldHarvestOnWithdraw;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -90,11 +91,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
         maxPools = 40;
         withdrawSlippageTolerance = 10;
-        minProfitToChargeFees = 1000;
+        minProfitToChargeFees = 1e16;
         minWantToDepositOrWithdraw = 10;
         minWantToRemovePool = 100;
         addUsedPool(_initialPoolIndex, _routerType);
         depositPool = usedPools.at(0); // Guarantees depositPool is always a Tarot pool
+        shouldHarvestOnDeposit = true;
+        shouldHarvestOnWithdraw = true;
     }
 
     /**
@@ -582,5 +585,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function setShouldHarvestOnDeposit(bool _shouldHarvestOnDeposit) external {
         _onlyStrategistOrOwner();
         shouldHarvestOnDeposit = _shouldHarvestOnDeposit;
+    }
+
+    /**
+     * @dev Sets if harvests should be done when withdrawing
+     */
+    function setShouldHarvestOnWithdraw(bool _shouldHarvestOnWithdraw) external {
+        _onlyStrategistOrOwner();
+        shouldHarvestOnWithdraw = _shouldHarvestOnWithdraw;
     }
 }

@@ -35,4 +35,7 @@ interface IStrategy {
 
     // If harvest should be called when depositing, controlled by governance
     function shouldHarvestOnDeposit() external returns (bool);
+
+    // If harvest should be called when withdrawing, controlled by governance
+    function shouldHarvestOnWithdraw() external returns (bool);
 }
