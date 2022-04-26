@@ -57,7 +57,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     /**
      * @dev Tarot variables
      * {usedPools} - A set of pool addresses which are the authorized lending pools that can be used
-     * {MAX_POOLS} - Sets the maximum amount of pools that can be added
+     * {maxPools} - Sets the maximum amount of pools that can be added
      * {depositPool} - Address of the pool that regular deposits will go to
      * {sharePriceSnapshot} - Saves the pricePerFullShare to be compared between harvests to calculate profit
      * {minProfitToChargeFees} - The minimum amount of profit for harvest to charge fees
@@ -66,7 +66,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {minWantToRemovePool} - Sets the allowed amount for a pool to have and still be removable (which will loose those funds)
      */
     EnumerableSetUpgradeable.AddressSet private usedPools;
-    uint256 public constant MAX_POOLS = 20;
+    uint256 public maxPools;
     address public depositPool;
     uint256 public sharePriceSnapshot;
     uint256 public minProfitToChargeFees;
@@ -85,6 +85,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
+        maxPools = 40;
         withdrawSlippageTolerance = 10;
         minProfitToChargeFees = 1000;
         minWantToDepositOrWithdraw = 10;
@@ -475,7 +476,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         address lp1 = IUniswapV2Pair(lpAddress).token1();
         bool containsWant = lp0 == want || lp1 == want;
         require(containsWant, "Pool does not contain want");
-        require(usedPools.length() < MAX_POOLS, "Reached max nr of pools");
+        require(usedPools.length() < maxPools, "Reached max nr of pools");
         (, , , address borrowable0, address borrowable1) = IFactory(factory).getLendingPool(lpAddress);
         address poolAddress = lp0 == want ? borrowable0 : borrowable1;
         bool addedPool = usedPools.add(poolAddress);
@@ -560,5 +561,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function setMinWantToRemovePool(uint256 _minWantToRemovePool) external {
         _onlyStrategistOrOwner();
         minWantToRemovePool = _minWantToRemovePool;
+    }
+    
+    /**
+     * @dev Sets the maximum amount of pools that can be used at any time
+     */
+    function setMaxPools(uint256 _maxPools) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_maxPools != 0 && _maxPools <= 100, "Invalid nr of pools");
+        maxPools = _maxPools;
     }
 }
