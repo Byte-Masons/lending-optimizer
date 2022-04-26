@@ -515,9 +515,21 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
+     * @dev Removes a list of pools.
+     */
+    function removeUsedPools(address[] calldata _poolsToRemove) external {
+        _onlyKeeper();
+        uint256 nrOfPools = _poolsToRemove.length;
+        for (uint256 index = 0; index < nrOfPools; index++) {
+            address pool = _poolsToRemove[index];
+            removeUsedPool(pool);
+        }
+    }
+
+    /**
      * @dev Removes a pool that will no longer be used.
      */
-    function removeUsedPool(address _pool) external {
+    function removeUsedPool(address _pool) public {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
         uint256 wantSupplied = wantSuppliedToPool(_pool);
