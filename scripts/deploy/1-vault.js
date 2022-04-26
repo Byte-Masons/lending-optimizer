@@ -3,7 +3,7 @@ async function main() {
 
   const wantAddress = '0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83';
   const tokenName = 'WFTM Lending Crypt';
-  const tokenSymbol = 'rf-l-WFTM';
+  const tokenSymbol = 'rf-t-WFTM';
   const depositFee = 0;
   const tvlCap = ethers.constants.MaxUint256;
 
