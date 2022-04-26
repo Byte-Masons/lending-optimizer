@@ -245,14 +245,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         updateExchangeRates();
         uint256 profit = profitSinceHarvest();
         if (profit >= minProfitToChargeFees) {
-            uint256 wftmFee = 0;
+            uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
-            if (want != WFTM) {
-                _swap(want, WFTM, (profit * totalFee) / PERCENT_DIVISOR);
-                wftmFee = wftm.balanceOf(address(this));
-            } else {
-                wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
-            }
 
             if (wftmFee != 0) {
                 uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
@@ -533,7 +527,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
         uint256 wantSupplied = wantSuppliedToPool(_pool);
-        require(wantSupplied < minWantToRemovePool, "Want is still supplied"); // should there be a min that we don't care about? like 10^5 or something
+        require(wantSupplied < minWantToRemovePool, "Want is still supplied");
 
         bool removedPool = usedPools.remove(_pool);
         require(removedPool, "Pool not used");
