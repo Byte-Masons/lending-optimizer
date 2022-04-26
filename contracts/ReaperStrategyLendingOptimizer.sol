@@ -63,7 +63,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {minProfitToChargeFees} - The minimum amount of profit for harvest to charge fees
      * {withdrawSlippageTolerance} - Allows some very small slippage on withdraws to avoid reverts
      * {minWantToDepositOrWithdraw} - A minimum amount to deposit or withdraw from a pool (to save gas on very small amounts)
-     * {minWantToRemovePool} - Sets the allowed amount for a pool to have and still be removable (which will loose those funds)
+     * {maxWantRemainingToRemovePool} - Sets the allowed amount for a pool to have and still be removable (which will loose those funds)
+     * {MAX_SLIPPAGE_TOLERANCE} - Sets a cap on the withdraw slippage tolerance 
      */
     EnumerableSetUpgradeable.AddressSet private usedPools;
     uint256 public maxPools;
@@ -72,9 +73,10 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     uint256 public minProfitToChargeFees;
     uint256 public withdrawSlippageTolerance;
     uint256 public minWantToDepositOrWithdraw;
-    uint256 public minWantToRemovePool;
+    uint256 public maxWantRemainingToRemovePool;
     bool public shouldHarvestOnDeposit;
     bool public shouldHarvestOnWithdraw;
+    uint256 public constant MAX_SLIPPAGE_TOLERANCE = 100;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -93,7 +95,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         withdrawSlippageTolerance = 10;
         minProfitToChargeFees = 1e16;
         minWantToDepositOrWithdraw = 10;
-        minWantToRemovePool = 100;
+        maxWantRemainingToRemovePool = 100;
         addUsedPool(_initialPoolIndex, _routerType);
         depositPool = usedPools.at(0); // Guarantees depositPool is always a Tarot pool
         shouldHarvestOnDeposit = true;
@@ -214,37 +216,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
-     * @dev Helper function to swap tokens given {_from}, {_to} and {_amount}
-     */
-    function _swap( // currently unused but perhaps we'll use this in chargeFees if "want" is not WFTM
-        address _from,
-        address _to,
-        uint256 _amount
-    ) internal {
-        if (_from == _to || _amount == 0) {
-            return;
-        }
-
-        address[] memory path = new address[](2);
-        path[0] = _from;
-        path[1] = _to;
-        IUniswapV2Router02(SPOOKY_ROUTER).swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            _amount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
-    }
-
-    /**
      * @dev Core harvest function.
      *      Charges fees based on the amount of WFTM gained from reward
      */
     function _chargeFees() internal {
         updateExchangeRates();
         uint256 profit = profitSinceHarvest();
-        // should we tweak this code so it can handle generic "want" besides WFTM?
         if (profit >= minProfitToChargeFees) {
             uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
@@ -265,7 +242,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
                 wftm.safeTransfer(msg.sender, callFeeToUser);
                 wftm.safeTransfer(treasury, treasuryFeeToVault);
                 wftm.safeTransfer(strategistRemitter, feeToStrategist);
-                sharePriceSnapshot = IVault(vault).getPricePerFullShare(); // moved this inside the nested if
+                sharePriceSnapshot = IVault(vault).getPricePerFullShare();
             }
         }
     }
@@ -379,9 +356,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function profitSinceHarvest() public view returns (uint256 profit) {
         uint256 ppfs = IVault(vault).getPricePerFullShare();
-        // if (ppfs <= sharePriceSnapshot) {
-        //     return 0;
-        // } should be ok to remove right since ppfs should only increase?
+        if (ppfs <= sharePriceSnapshot) {
+            return 0;
+        }
         uint256 sharePriceChange = ppfs - sharePriceSnapshot;
         profit = (balanceOf() * sharePriceChange) / 1 ether;
     }
@@ -391,20 +368,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      Profit is denominated in WFTM, and takes fees into account.
      */
     function estimateHarvest() external view override returns (uint256 profit, uint256 callFeeToUser) {
-        uint256 profitInWant = profitSinceHarvest();
-        if (want != WFTM) {
-            address[] memory rewardToWftmPath = new address[](2);
-            rewardToWftmPath[0] = want;
-            rewardToWftmPath[1] = WFTM;
-            uint256[] memory amountOutMins = IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(
-                profitInWant,
-                rewardToWftmPath
-            );
-            profit += amountOutMins[1];
-        } else {
-            profit += profitInWant;
-        }
-
+        profit += profitSinceHarvest();
         uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
         callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
         profit -= wftmFee;
@@ -419,12 +383,10 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function _retireStrat() internal override {
         uint256 suppliedBalance = balanceOfPools();
-        if (suppliedBalance > minWantToRemovePool) {
+        if (suppliedBalance > maxWantRemainingToRemovePool) {
             _reclaimWant();
             suppliedBalance = balanceOfPools();
-            require(suppliedBalance <= minWantToRemovePool, "Want still supplied to pools");
-            // ^ could there be multiple pools that each have "minWantToRemovePool"?
-            // in which case the total "suppliedBalance" would exceed "minWantToRemovePool"
+            require(suppliedBalance <= maxWantRemainingToRemovePool, "Want still supplied to pools");
         }
         uint256 wantBalance = balanceOfWant();
         IERC20Upgradeable(want).safeTransfer(vault, wantBalance);
@@ -522,7 +484,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function removeUsedPool(address _pool) public {
         _onlyKeeper();
         require(usedPools.length() > 1, "Must have at least 1 pool");
-        require(wantSuppliedToPool(_pool) < minWantToRemovePool, "Want is still supplied");
+        require(wantSuppliedToPool(_pool) < maxWantRemainingToRemovePool, "Want is still supplied");
         require(usedPools.remove(_pool), "Pool not used");
         if (_pool == depositPool) {
             depositPool = usedPools.at(0);
@@ -544,7 +506,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function setWithdrawSlippageTolerance(uint256 _withdrawSlippageTolerance) external {
         _onlyStrategistOrOwner();
-        withdrawSlippageTolerance = _withdrawSlippageTolerance; // also might be nice to have a max for this
+        require(_withdrawSlippageTolerance <= MAX_SLIPPAGE_TOLERANCE, "Slippage tolerance is too high");
+        withdrawSlippageTolerance = _withdrawSlippageTolerance;
     }
 
     /**
@@ -564,11 +527,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     }
 
     /**
-     * @dev Sets the minimum amount of want lost when removing a pool
+     * @dev Sets the maximum amount of want remaining in a pool to still be able to remove it
      */
-    function setMinWantToRemovePool(uint256 _minWantToRemovePool) external {
+    function setMaxWantRemainingToRemovePool(uint256 _maxWantRemainingToRemovePool) external {
         _onlyStrategistOrOwner();
-        minWantToRemovePool = _minWantToRemovePool; // might be nice to have a max constant for this?
+        require(_maxWantRemainingToRemovePool <= 10e6, "Above max cap");
+        maxWantRemainingToRemovePool = _maxWantRemainingToRemovePool;
     }
     
     /**
