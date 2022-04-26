@@ -73,6 +73,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     uint256 public withdrawSlippageTolerance;
     uint256 public minWantToDepositOrWithdraw;
     uint256 public minWantToRemovePool;
+    bool public shouldHarvestOnDeposit;
 
     /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
@@ -573,5 +574,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function setMaxPools(uint256 _maxPools) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_maxPools != 0 && _maxPools <= 100, "Invalid nr of pools");
         maxPools = _maxPools;
+    }
+
+    /**
+     * @dev Sets if harvests should be done when depositing
+     */
+    function setShouldHarvestOnDeposit(bool _shouldHarvestOnDeposit) external {
+        _onlyStrategistOrOwner();
+        shouldHarvestOnDeposit = _shouldHarvestOnDeposit;
     }
 }

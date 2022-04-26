@@ -159,6 +159,11 @@ contract ReaperVaultv1_4 is ERC20, Ownable, ReentrancyGuard {
      */
     function deposit(uint256 _amount) public nonReentrant {
         require(_amount != 0, "please provide amount");
+        bool shouldHarvest = IStrategy(strategy).shouldHarvestOnDeposit();
+        if (shouldHarvest) {
+            IStrategy(strategy).harvest();
+        }
+        
         uint256 _pool = balance();
         require(_pool + _amount <= tvlCap, "vault is full!");
 
