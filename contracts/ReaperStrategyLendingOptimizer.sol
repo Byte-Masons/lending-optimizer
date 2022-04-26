@@ -81,7 +81,9 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function initialize(
         address _vault,
         address[] memory _feeRemitters,
-        address[] memory _strategists
+        address[] memory _strategists,
+        uint256 _initialPoolIndex,
+        RouterType _routerType
     ) public initializer {
         __ReaperBaseStrategy_init(_vault, _feeRemitters, _strategists);
         sharePriceSnapshot = IVault(_vault).getPricePerFullShare();
@@ -90,6 +92,8 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         minProfitToChargeFees = 1000;
         minWantToDepositOrWithdraw = 10;
         minWantToRemovePool = 100;
+        addUsedPool(_initialPoolIndex, _routerType);
+        depositPool = usedPools.at(0); // Guarantees depositPool is always a Tarot pool
     }
 
     /**
