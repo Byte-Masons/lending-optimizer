@@ -177,6 +177,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      */
     function rebalance(PoolAllocation[] calldata _allocations) external {
         _onlyKeeper();
+        _reclaimWant(); // Withdraw old deposits to deposit the new allocation
         uint256 nrOfAllocations = _allocations.length;
         for (uint256 index = 0; index < nrOfAllocations; index++) {
             address pool = _allocations[index].poolAddress;
