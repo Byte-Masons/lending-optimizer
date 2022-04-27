@@ -49,10 +49,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     /**
      * @dev Tokens Used:
      * {WFTM} - Required for liquidity routing when doing swaps.
+     * {USDC} - Used for liquidity routing to swap want to WFTM
      * {want} - Address of the token being lent
      */
     address public constant WFTM = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
-    address public constant want = address(0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7);
+    address public constant USDC = address(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
+    address public constant want = address(0xfB98B335551a418cD0737375a2ea0ded62Ea213b);
 
     /**
      * @dev Tarot variables
@@ -79,6 +81,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     uint256 public constant MAX_SLIPPAGE_TOLERANCE = 100;
 
     /**
+     * @dev Paths used to swap tokens:
+     * {wantToWftmPath} - to swap {want} to {WFTM} (using SPOOKY_ROUTER)
+     */
+    address[] public wantToWftmPath;
+
+    /**
      * @dev Initializes the strategy. Sets parameters and saves routes.
      * @notice see documentation for each variable above its respective declaration.
      */
@@ -100,6 +108,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         depositPool = usedPools.at(0); // Guarantees depositPool is always a Tarot pool
         shouldHarvestOnDeposit = true;
         shouldHarvestOnWithdraw = true;
+        wantToWftmPath = [want, USDC, WFTM];
     }
 
     /**
@@ -234,7 +243,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
                         fee = withdrawn + wantBal;
                     }
                 }
-                _swap(want, WFTM, fee);
+                _swap(fee, wantToWftmPath);
                 uint256 wftmBalance = IERC20Upgradeable(WFTM).balanceOf(address(this));
                 uint256 callFeeToUser = (wftmBalance * callFee) / PERCENT_DIVISOR;
                 uint256 treasuryFeeToVault = (wftmBalance * treasuryFee) / PERCENT_DIVISOR;
@@ -253,22 +262,18 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * @dev Helper function to swap tokens given {_from}, {_to} and {_amount}
      */
     function _swap(
-        address _from,
-        address _to,
-        uint256 _amount
+        uint256 _amount,
+        address[] memory _path
     ) internal {
-        if (_from == _to || _amount == 0) {
+        if (_path.length < 2 || _amount == 0) {
             return;
         }
 
-        address[] memory path = new address[](2);
-        path[0] = _from;
-        path[1] = _to;
-        IERC20Upgradeable(_from).safeIncreaseAllowance(SPOOKY_ROUTER, _amount);
+        IERC20Upgradeable(_path[0]).safeIncreaseAllowance(SPOOKY_ROUTER, _amount);
         IUniswapV2Router02(SPOOKY_ROUTER).swapExactTokensForTokensSupportingFeeOnTransferTokens(
             _amount,
             0,
-            path,
+            _path,
             address(this),
             block.timestamp
         );
@@ -397,10 +402,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
     function estimateHarvest() external view override returns (uint256 profit, uint256 callFeeToUser) {
         uint256 profitInWant = profitSinceHarvest();
         if (profitInWant != 0) {
-            address[] memory path = new address[](2);
-            path[0] = want;
-            path[1] = WFTM;
-            profit += IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(profitInWant, path)[1];
+            profit += IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(profitInWant, wantToWftmPath)[1];
         }
 
         profit += IERC20Upgradeable(WFTM).balanceOf(address(this));
