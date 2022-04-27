@@ -52,7 +52,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {want} - Address of the token being lent
      */
     address public constant WFTM = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
-    address public constant want = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
+    address public constant want = address(0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7);
 
     /**
      * @dev Tarot variables
@@ -223,19 +223,21 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         updateExchangeRates();
         uint256 profit = profitSinceHarvest();
         if (profit >= minProfitToChargeFees) {
-            uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
+            uint256 fee = (profit * totalFee) / PERCENT_DIVISOR;
             IERC20Upgradeable wftm = IERC20Upgradeable(WFTM);
 
-            if (wftmFee != 0) {
+            if (fee != 0) {
                 uint256 wantBal = IERC20Upgradeable(want).balanceOf(address(this));
-                if (wantBal < wftmFee) {
-                    uint256 withdrawn = _withdrawUnderlying(wftmFee - wantBal);
-                    if (withdrawn + wantBal < wftmFee) {
-                        wftmFee = withdrawn + wantBal;
+                if (wantBal < fee) {
+                    uint256 withdrawn = _withdrawUnderlying(fee - wantBal);
+                    if (withdrawn + wantBal < fee) {
+                        fee = withdrawn + wantBal;
                     }
                 }
-                uint256 callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
-                uint256 treasuryFeeToVault = (wftmFee * treasuryFee) / PERCENT_DIVISOR;
+                _swap(want, WFTM, fee);
+                uint256 wftmBalance = IERC20Upgradeable(WFTM).balanceOf(address(this));
+                uint256 callFeeToUser = (wftmBalance * callFee) / PERCENT_DIVISOR;
+                uint256 treasuryFeeToVault = (wftmBalance * treasuryFee) / PERCENT_DIVISOR;
                 uint256 feeToStrategist = (treasuryFeeToVault * strategistFee) / PERCENT_DIVISOR;
                 treasuryFeeToVault -= feeToStrategist;
 
@@ -245,6 +247,31 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
                 sharePriceSnapshot = IVault(vault).getPricePerFullShare();
             }
         }
+    }
+
+    /**
+     * @dev Helper function to swap tokens given {_from}, {_to} and {_amount}
+     */
+    function _swap(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) internal {
+        if (_from == _to || _amount == 0) {
+            return;
+        }
+
+        address[] memory path = new address[](2);
+        path[0] = _from;
+        path[1] = _to;
+        IERC20Upgradeable(_from).safeIncreaseAllowance(SPOOKY_ROUTER, _amount);
+        IUniswapV2Router02(SPOOKY_ROUTER).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            _amount,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        );
     }
 
     /**
@@ -368,10 +395,19 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      *      Profit is denominated in WFTM, and takes fees into account.
      */
     function estimateHarvest() external view override returns (uint256 profit, uint256 callFeeToUser) {
-        profit += profitSinceHarvest();
-        uint256 wftmFee = (profit * totalFee) / PERCENT_DIVISOR;
-        callFeeToUser = (wftmFee * callFee) / PERCENT_DIVISOR;
-        profit -= wftmFee;
+        uint256 profitInWant = profitSinceHarvest();
+        if (profitInWant != 0) {
+            address[] memory path = new address[](2);
+            path[0] = want;
+            path[1] = WFTM;
+            profit += IUniswapV2Router02(SPOOKY_ROUTER).getAmountsOut(profitInWant, path)[1];
+        }
+
+        profit += IERC20Upgradeable(WFTM).balanceOf(address(this));
+        
+        uint256 fee = (profit * totalFee) / PERCENT_DIVISOR;
+        callFeeToUser = (fee * callFee) / PERCENT_DIVISOR;
+        profit -= fee;
     }
 
     /**

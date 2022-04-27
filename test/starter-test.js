@@ -28,15 +28,7 @@ const addUsedPools = async (strategy) => {
   const pools = [
     {
       routerType: 1,
-      index: 5,
-    },
-    {
-      routerType: 0,
-      index: 84,
-    },
-    {
-      routerType: 1,
-      index: 21,
+      index: 17,
     },
   ];
   await strategy.addUsedPools(pools);
@@ -45,20 +37,12 @@ const addUsedPools = async (strategy) => {
 const rebalance = async (strategy) => {
   const poolAllocations = [
     {
-      poolAddress: '0x02ABD28Ac6C7161aa556A2e5DC9Bea54896695C9',
+      poolAddress: '0xbDEA9419f069001907c13808B4F68282e013e118',
       allocation: ethers.BigNumber.from('654925862235622915903'),
     },
     {
-      poolAddress: '0xBC05B4834FEDb1c74DF54777C4439023c0DF4534',
+      poolAddress: '0x445F69a4A1E6A5F15980a560Bf9dEB444ee51AC1',
       allocation: ethers.BigNumber.from('65391926615092011295'),
-    },
-    {
-      poolAddress: '0xcdE8E796038373Ff030B56c9717757d293B703eb',
-      allocation: ethers.BigNumber.from('180955769831347900205'),
-    },
-    {
-      poolAddress: '0x7b0D24741d85C6733D10ED59b22335FbB3ADA32E',
-      allocation: ethers.BigNumber.from('3098726441317937172597'),
     },
   ];
   await strategy.rebalance(poolAllocations);
@@ -76,9 +60,9 @@ describe('Vaults', function () {
 
   const treasuryAddr = '0x0e7c5313E9BB80b654734d9b7aB1FB01468deE3b';
   const paymentSplitterAddress = '0x63cbd4134c2253041F370472c130e92daE4Ff174';
-  const wantAddress = '0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83';
+  const wantAddress = '0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7';
 
-  const wantHolderAddr = '0x0f2A144d711E7390d72BD474653170B201D504C8';
+  const wantHolderAddr = '0xbc58781993b3e78a1b0608f899320825189d3631';
   const strategistAddr = '0x1A20D7A31e5B3Bc5f02c8A146EF6f394502a10c4';
 
   let owner;
@@ -93,7 +77,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 36517721,
+            blockNumber: 37058774,
           },
         },
       ],
@@ -116,7 +100,7 @@ describe('Vaults', function () {
     Vault = await ethers.getContractFactory('ReaperVaultv1_4');
     Strategy = await ethers.getContractFactory('ReaperStrategyLendingOptimizer');
     Want = await ethers.getContractFactory('@openzeppelin/contracts/token/ERC20/ERC20.sol:ERC20');
-    const poolIndex = 3;
+    const poolIndex = 12;
     const routerType = 1;
 
     //deploy contracts
@@ -237,11 +221,10 @@ describe('Vaults', function () {
     it('should provide yield', async function () {
       const timeToSkip = 3600;
       const initialUserBalance = await want.balanceOf(wantHolderAddr);
-      const depositAmount = toWantUnit('4000');
+      const depositAmount = initialUserBalance;
 
       await vault.connect(wantHolder).deposit(depositAmount);
       const initialVaultBalance = await vault.balance();
-      await strategy.reclaimWant();
       await rebalance(strategy);
 
       await strategy.updateHarvestLogCadence(1);
