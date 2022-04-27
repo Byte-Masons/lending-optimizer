@@ -2,15 +2,15 @@
   "manifestVersion": "3.2",
   "proxies": [
     {
-      "address": "0x235A76b2747728Ec5CBBc36642dc27308C9189be",
-      "txHash": "0x6d3a5892928bd0602659baf183361a247f04180d063eb773d8ed20fbaa5b384d",
+      "address": "0x7D2F7B4001322318050Fc11aD3d1dda5d2c82d38",
+      "txHash": "0xb6a110d1a9a6b018e533e8ae257f9ab52d435bf7341e2531a4c9a6585b3a73b0",
       "kind": "uups"
     }
   ],
   "impls": {
-    "816a98d28d550783daa8d69cb4580f646185f3ab4310f57682f4e20b075f5852": {
-      "address": "0xe16A5A23cfB6926e9DDD41067802d23E66d1dcd5",
-      "txHash": "0x29a0e647327dcc8cf8af7f8d31d6d821e103ab435542360f4822d9ff1d914daf",
+    "e20f2ac459c7a04925f76cfc0f0d5cf45be9bae4fb73fe40f68c8e59f45531f9": {
+      "address": "0x171Bf740E6b54EFcd4404A36798CA4848A5a7D93",
+      "txHash": "0x6a0841948852e68d8d5cc81708a940b58c5ce8a9c886d658ab23f0c69194f7da",
       "layout": {
         "storage": [
           {
@@ -113,7 +113,7 @@
             "label": "harvestLog",
             "offset": 0,
             "slot": "351",
-            "type": "t_array(t_struct(Harvest)7145_storage)dyn_storage",
+            "type": "t_array(t_struct(Harvest)7117_storage)dyn_storage",
             "contract": "ReaperBaseStrategyv2",
             "src": "contracts\\abstract\\ReaperBaseStrategyv2.sol:27"
           },
@@ -211,7 +211,7 @@
             "slot": "363",
             "type": "t_struct(AddressSet)2587_storage",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:69"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:71"
           },
           {
             "label": "maxPools",
@@ -219,7 +219,7 @@
             "slot": "365",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:70"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:72"
           },
           {
             "label": "depositPool",
@@ -227,7 +227,7 @@
             "slot": "366",
             "type": "t_address",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:71"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:73"
           },
           {
             "label": "sharePriceSnapshot",
@@ -235,7 +235,7 @@
             "slot": "367",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:72"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:74"
           },
           {
             "label": "minProfitToChargeFees",
@@ -243,7 +243,7 @@
             "slot": "368",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:73"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:75"
           },
           {
             "label": "withdrawSlippageTolerance",
@@ -251,7 +251,7 @@
             "slot": "369",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:74"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:76"
           },
           {
             "label": "minWantToDepositOrWithdraw",
@@ -259,7 +259,7 @@
             "slot": "370",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:75"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:77"
           },
           {
             "label": "maxWantRemainingToRemovePool",
@@ -267,7 +267,7 @@
             "slot": "371",
             "type": "t_uint256",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:76"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:78"
           },
           {
             "label": "shouldHarvestOnDeposit",
@@ -275,7 +275,7 @@
             "slot": "372",
             "type": "t_bool",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:77"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:79"
           },
           {
             "label": "shouldHarvestOnWithdraw",
@@ -283,7 +283,15 @@
             "slot": "372",
             "type": "t_bool",
             "contract": "ReaperStrategyLendingOptimizer",
-            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:78"
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:80"
+          },
+          {
+            "label": "wantToWftmPath",
+            "offset": 0,
+            "slot": "373",
+            "type": "t_array(t_address)dyn_storage",
+            "contract": "ReaperStrategyLendingOptimizer",
+            "src": "contracts\\ReaperStrategyLendingOptimizer.sol:87"
           }
         ],
         "types": {
@@ -291,11 +299,15 @@
             "label": "address",
             "numberOfBytes": "20"
           },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
           "t_array(t_bytes32)dyn_storage": {
             "label": "bytes32[]",
             "numberOfBytes": "32"
           },
-          "t_array(t_struct(Harvest)7145_storage)dyn_storage": {
+          "t_array(t_struct(Harvest)7117_storage)dyn_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest[]",
             "numberOfBytes": "32"
           },
@@ -343,7 +355,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(Harvest)7145_storage": {
+          "t_struct(Harvest)7117_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest",
             "members": [
               {
