@@ -52,7 +52,7 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
      * {want} - Address of the token being lent
      */
     address public constant WFTM = address(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
-    address public constant want = address(0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7);
+    address public constant want = address(0x8D7d3409881b51466B483B11Ea1B8A03cdEd89ae);
 
     /**
      * @dev Tarot variables

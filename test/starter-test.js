@@ -28,7 +28,7 @@ const addUsedPools = async (strategy) => {
   const pools = [
     {
       routerType: 1,
-      index: 17,
+      index: 16,
     },
   ];
   await strategy.addUsedPools(pools);
@@ -37,12 +37,12 @@ const addUsedPools = async (strategy) => {
 const rebalance = async (strategy) => {
   const poolAllocations = [
     {
-      poolAddress: '0xbDEA9419f069001907c13808B4F68282e013e118',
-      allocation: ethers.BigNumber.from('654925862235622915903'),
+      poolAddress: '0xE9108E10723cBE6e64f3f55159E45974b4029859',
+      allocation: ethers.BigNumber.from('197548'),
     },
     {
-      poolAddress: '0x445F69a4A1E6A5F15980a560Bf9dEB444ee51AC1',
-      allocation: ethers.BigNumber.from('65391926615092011295'),
+      poolAddress: '0x78d8336f9046e45a374fFF00278794d615987213',
+      allocation: ethers.BigNumber.from('197548'),
     },
   ];
   await strategy.rebalance(poolAllocations);
@@ -60,9 +60,9 @@ describe('Vaults', function () {
 
   const treasuryAddr = '0x0e7c5313E9BB80b654734d9b7aB1FB01468deE3b';
   const paymentSplitterAddress = '0x63cbd4134c2253041F370472c130e92daE4Ff174';
-  const wantAddress = '0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7';
+  const wantAddress = '0x8D7d3409881b51466B483B11Ea1B8A03cdEd89ae';
 
-  const wantHolderAddr = '0xbc58781993b3e78a1b0608f899320825189d3631';
+  const wantHolderAddr = '0x9019bd2e9c7e37c2e79ce96f1c884785ecb6cf65';
   const strategistAddr = '0x1A20D7A31e5B3Bc5f02c8A146EF6f394502a10c4';
 
   let owner;
@@ -77,7 +77,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 37058774,
+            blockNumber: 37093315,
           },
         },
       ],
@@ -100,7 +100,7 @@ describe('Vaults', function () {
     Vault = await ethers.getContractFactory('ReaperVaultv1_4');
     Strategy = await ethers.getContractFactory('ReaperStrategyLendingOptimizer');
     Want = await ethers.getContractFactory('@openzeppelin/contracts/token/ERC20/ERC20.sol:ERC20');
-    const poolIndex = 12;
+    const poolIndex = 0;
     const routerType = 1;
 
     //deploy contracts
