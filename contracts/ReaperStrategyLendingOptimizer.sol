@@ -146,14 +146,13 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 nrOfPools = usedPools.length();
         for (uint256 index = 0; index < nrOfPools; index++) {
             address currentPool = usedPools.at(index);
-            uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
-
             uint256 suppliedToPool = wantSuppliedToPool(currentPool);
-
+            if (suppliedToPool < minWantToDepositOrWithdraw) {
+                continue;
+            }
+            uint256 exchangeRate = IBorrowable(currentPool).exchangeRate();
             uint256 poolAvailableWant = IERC20Upgradeable(want).balanceOf(currentPool);
-
             uint256 ableToPullInUnderlying = MathUpgradeable.min(suppliedToPool, poolAvailableWant);
-
             uint256 underlyingToWithdraw = MathUpgradeable.min(remainingUnderlyingNeeded, ableToPullInUnderlying);
 
             if (underlyingToWithdraw < minWantToDepositOrWithdraw) {
@@ -281,7 +280,12 @@ contract ReaperStrategyLendingOptimizer is ReaperBaseStrategyv2 {
         uint256 nrOfPools = usedPools.length();
         for (uint256 index = 0; index < nrOfPools; index++) {
             address pool = usedPools.at(index);
-            IBorrowable(pool).exchangeRate();
+            uint256 bTokenBalance = IBorrowable(pool).balanceOf(address(this));
+            // Checking the borrowable balance here for gas efficiency, even though it is not strictly correct
+            if (bTokenBalance >= minWantToDepositOrWithdraw) {
+                // Only update where some want is deposited
+                IBorrowable(pool).exchangeRate();
+            }
         }
     }
 
