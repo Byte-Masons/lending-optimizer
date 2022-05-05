@@ -2,15 +2,15 @@
   "manifestVersion": "3.2",
   "proxies": [
     {
-      "address": "0x235A76b2747728Ec5CBBc36642dc27308C9189be",
-      "txHash": "0x6d3a5892928bd0602659baf183361a247f04180d063eb773d8ed20fbaa5b384d",
+      "address": "0x6CCD9FeabCF54d8781c1EA1C5D03B8B61F3Cecdd",
+      "txHash": "0x375b0c33ee991bcdd5dc027571997e0c629ec1d9885cc16c85554157d3ee7bc8",
       "kind": "uups"
     }
   ],
   "impls": {
-    "816a98d28d550783daa8d69cb4580f646185f3ab4310f57682f4e20b075f5852": {
-      "address": "0xe16A5A23cfB6926e9DDD41067802d23E66d1dcd5",
-      "txHash": "0x29a0e647327dcc8cf8af7f8d31d6d821e103ab435542360f4822d9ff1d914daf",
+    "a909ba73a765651ab3bdf572c5efa59fa0ce3a802f20837e3d9239244f911fde": {
+      "address": "0xB985E5a2fF80f529d33Db6e00dc24C0c82091135",
+      "txHash": "0x6ac67b427532da2ddcdc189d5cf2909cbd90a685d0a75dce923954a786d4c306",
       "layout": {
         "storage": [
           {
@@ -113,7 +113,7 @@
             "label": "harvestLog",
             "offset": 0,
             "slot": "351",
-            "type": "t_array(t_struct(Harvest)7145_storage)dyn_storage",
+            "type": "t_array(t_struct(Harvest)7168_storage)dyn_storage",
             "contract": "ReaperBaseStrategyv2",
             "src": "contracts\\abstract\\ReaperBaseStrategyv2.sol:27"
           },
@@ -295,7 +295,7 @@
             "label": "bytes32[]",
             "numberOfBytes": "32"
           },
-          "t_array(t_struct(Harvest)7145_storage)dyn_storage": {
+          "t_array(t_struct(Harvest)7168_storage)dyn_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest[]",
             "numberOfBytes": "32"
           },
@@ -343,7 +343,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(Harvest)7145_storage": {
+          "t_struct(Harvest)7168_storage": {
             "label": "struct ReaperBaseStrategyv2.Harvest",
             "members": [
               {
