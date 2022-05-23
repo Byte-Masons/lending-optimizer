@@ -1,7 +1,7 @@
 async function main() {
-  const vaultAddress = '0xDd957FbBdB549B957A1Db92b88bBA5297D0BbE99';
+  const vaultAddress = '0xCdb3eb37BD298e57009869D9Be5402b8885aAe9D';
   const ERC20 = await ethers.getContractFactory('@openzeppelin/contracts/token/ERC20/ERC20.sol:ERC20');
-  const wantAddress = '0xB12BFcA5A55806AaF64E99521918A4bf0fC40802';
+  const wantAddress = '0x049d68029688eAbF473097a2fC38ef61633A3C7A';
   const want = await ERC20.attach(wantAddress);
   await want.approve(vaultAddress, ethers.utils.parseEther('100'));
   console.log('want approved');

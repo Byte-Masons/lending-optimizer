@@ -60,9 +60,9 @@ describe('Vaults', function () {
 
   const treasuryAddr = '0x0e7c5313E9BB80b654734d9b7aB1FB01468deE3b';
   const paymentSplitterAddress = '0x63cbd4134c2253041F370472c130e92daE4Ff174';
-  const wantAddress = '0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7';
+  const wantAddress = '0x049d68029688eAbF473097a2fC38ef61633A3C7A';
 
-  const wantHolderAddr = '0xbc58781993b3e78a1b0608f899320825189d3631';
+  const wantHolderAddr = '0x9308e02e947a61bdf86fbac34d1791921e00ea65';
   const strategistAddr = '0x1A20D7A31e5B3Bc5f02c8A146EF6f394502a10c4';
 
   let owner;
@@ -77,7 +77,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 37058774,
+            blockNumber: 38865766,
           },
         },
       ],
@@ -100,7 +100,7 @@ describe('Vaults', function () {
     Vault = await ethers.getContractFactory('ReaperVaultv1_4');
     Strategy = await ethers.getContractFactory('ReaperStrategyLendingOptimizer');
     Want = await ethers.getContractFactory('@openzeppelin/contracts/token/ERC20/ERC20.sol:ERC20');
-    const poolIndex = 12;
+    const poolIndex = 27;
     const routerType = 1;
 
     //deploy contracts
@@ -117,8 +117,8 @@ describe('Vaults', function () {
     //approving LP token and vault share spend
     await want.connect(wantHolder).approve(vault.address, ethers.constants.MaxUint256);
 
-    await addUsedPools(strategy);
-    await rebalance(strategy);
+    // await addUsedPools(strategy);
+    // await rebalance(strategy);
   });
 
   describe('Deploying the vault and strategy', function () {
@@ -132,7 +132,7 @@ describe('Vaults', function () {
     });
   });
 
-  describe('Vault Tests', function () {
+  xdescribe('Vault Tests', function () {
     it('should allow deposits and account for them correctly', async function () {
       const userBalance = await want.balanceOf(wantHolderAddr);
       const vaultBalance = await vault.balance();
@@ -244,7 +244,7 @@ describe('Vaults', function () {
       console.log(`Average APR across ${numHarvests} harvests is ${averageAPR} basis points.`);
     });
   });
-  describe('Strategy', function () {
+  xdescribe('Strategy', function () {
     it('should be able to pause and unpause', async function () {
       await strategy.pause();
       const depositAmount = toWantUnit('1');

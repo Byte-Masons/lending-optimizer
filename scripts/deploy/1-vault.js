@@ -1,9 +1,9 @@
 async function main() {
   const Vault = await ethers.getContractFactory('ReaperVaultv1_4');
 
-  const wantAddress = '0x6c021Ae822BEa943b2E66552bDe1D2696a53fbB7';
-  const tokenName = 'Tomb Tarot Crypt';
-  const tokenSymbol = 'rf-t-TOMB';
+  const wantAddress = '0x049d68029688eAbF473097a2fC38ef61633A3C7A';
+  const tokenName = 'fUSDT Tarot Crypt';
+  const tokenSymbol = 'rf-t-fUSDT';
   const depositFee = 0;
   const tvlCap = ethers.constants.MaxUint256;
 
