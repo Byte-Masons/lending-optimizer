@@ -77,7 +77,7 @@ describe('Vaults', function () {
         {
           forking: {
             jsonRpcUrl: 'https://rpc.ftm.tools/',
-            blockNumber: 37068342,
+            // blockNumber: 37068342,
           },
         },
       ],
@@ -121,7 +121,80 @@ describe('Vaults', function () {
     await rebalance(strategy);
   });
 
-  describe('Deploying the vault and strategy', function () {
+  describe('Upgrade for repayment', function () {
+    it('should go through', async function () {
+      await moveTimeForward(3600* 6);
+      const deployedVault = await Vault.attach('0xC43BC54aefF66c16Ea26ba142Dc58682c4eFe407');
+
+      const deployedStratProxyAddr = '0x7D2F7B4001322318050Fc11aD3d1dda5d2c82d38';
+      const deployedStratProxy = await Strategy.attach(deployedStratProxyAddr);
+      const StrategyV2 = await ethers.getContractFactory('ReaperStrategyLendingOptimizerV2');
+
+      const adminAccount = '0x3b410908e71Ee04e7dE2a87f8F9003AFe6c1c7cE';
+      await hre.network.provider.request({
+        method: 'hardhat_impersonateAccount',
+        params: [adminAccount],
+      });
+      const admin = await ethers.provider.getSigner(adminAccount);
+
+      const newImplAddress = await hre.upgrades.prepareUpgrade(deployedStratProxyAddr, StrategyV2);
+      await deployedStratProxy.connect(admin).upgradeTo(newImplAddress);
+
+      // verify upgrade went through
+
+      // new strat balance should be 0
+      let stratBalance = await deployedStratProxy.balanceOf();
+      expect(stratBalance).to.equal(0);
+      // new vault balance should be 0
+      let vaultBalance = await deployedVault.balance();
+      expect(vaultBalance).to.equal(0);
+
+      const MAI = await Want.attach('0xfB98B335551a418cD0737375a2ea0ded62Ea213b');
+      const shareholderAddr = '0x668e20d4d3dc229c4a864d4f002b1ecc7a5a745f';
+      await hre.network.provider.request({
+        method: 'hardhat_impersonateAccount',
+        params: [shareholderAddr],
+      });
+      const shareholder = await ethers.provider.getSigner(shareholderAddr);
+      // withdrawing as one of the shareholders should revert due to the shouldHarvestOnWithdraw flag
+      // harvests are not allowed while the strat is panicked
+      await expect(deployedVault.connect(shareholder).withdrawAll()).to.be.reverted;
+
+      // pump money into the strategy equal to 27,595.890194347616727031
+      const maiHolderAddress = '0xbE937E745aF31d9C83fE824402888c3499b4F81D';
+      await hre.network.provider.request({
+        method: 'hardhat_impersonateAccount',
+        params: [maiHolderAddress],
+      });
+      const maiHolder = await ethers.provider.getSigner(maiHolderAddress);
+      await MAI.connect(maiHolder).transfer(deployedStratProxyAddr, ethers.utils.parseEther('27595.890194347616727031'));
+
+      // new strat balance should be 27,595.890194347616727031
+      stratBalance = await deployedStratProxy.balanceOf();
+      expect(stratBalance).to.equal(ethers.BigNumber.from('27595890194347616727031'));
+      // new vault balance should be 27,595.890194347616727031
+      vaultBalance = await deployedVault.balance();
+      expect(vaultBalance).to.equal(ethers.BigNumber.from('27595890194347616727031'));
+
+      // withdrawals should still revert though since shouldHarvestOnWithdraw flag is still set
+      await expect(deployedVault.connect(shareholder).withdrawAll()).to.be.reverted;
+
+      // now let's turn off the shouldHarvestOnWithdraw flag
+      await deployedStratProxy.connect(admin).setShouldHarvestOnWithdraw(false);
+
+      // finally withdrawals should go through
+      const shareholderInitialMAIBal = await MAI.balanceOf(shareholderAddr);
+      await deployedVault.connect(shareholder).withdrawAll();
+      const shareholderFinalMAIBal = await MAI.balanceOf(shareholderAddr);
+      expect(shareholderFinalMAIBal).to.be.gt(shareholderInitialMAIBal);
+      console.log(`Shareholder got back ${ethers.utils.formatEther(shareholderFinalMAIBal.sub(shareholderInitialMAIBal))} MAI`);
+
+      const shareholderFinalVaultBal = await deployedVault.balanceOf(shareholderAddr);
+      expect(shareholderFinalVaultBal).to.equal(0);
+    });
+  });
+
+  xdescribe('Deploying the vault and strategy', function () {
     it('should initiate vault with a 0 balance', async function () {
       const totalBalance = await vault.balance();
       const availableBalance = await vault.available();
@@ -132,7 +205,7 @@ describe('Vaults', function () {
     });
   });
 
-  describe('Vault Tests', function () {
+  xdescribe('Vault Tests', function () {
     it('should allow deposits and account for them correctly', async function () {
       const userBalance = await want.balanceOf(wantHolderAddr);
       const vaultBalance = await vault.balance();
@@ -244,7 +317,7 @@ describe('Vaults', function () {
       console.log(`Average APR across ${numHarvests} harvests is ${averageAPR} basis points.`);
     });
   });
-  describe('Strategy', function () {
+  xdescribe('Strategy', function () {
     it('should be able to pause and unpause', async function () {
       await strategy.pause();
       const depositAmount = toWantUnit('1');
