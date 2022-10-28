@@ -1,5 +1,5 @@
 async function main() {
-  const stratFactory = await ethers.getContractFactory('ReaperStrategyLendingOptimizer');
+  const stratFactory = await ethers.getContractFactory('ReaperStrategyLendingOptimizerV2');
   const stratContract = await hre.upgrades.upgradeProxy('0x7D2F7B4001322318050Fc11aD3d1dda5d2c82d38', stratFactory, {
     timeout: 0,
   });
