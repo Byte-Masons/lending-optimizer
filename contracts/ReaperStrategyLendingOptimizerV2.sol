@@ -303,6 +303,21 @@ contract ReaperStrategyLendingOptimizerV2 is ReaperBaseStrategyv2 {
     }
 
     /**
+     * @dev Function to secure funds recovered from decomissioned Tarot pool and send them back
+     *      to the treasury. May only be called by DEFAULT_ADMIN_ROLE (4/7 multisig).
+     */
+    function recoverLocalAssets(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 wantBal = balanceOfWant();
+        if (wantBal != 0) {
+            if (_amount > wantBal) {
+                _amount = wantBal;
+            }
+
+            IERC20Upgradeable(want).safeTransfer(treasury, _amount);
+        }
+    }
+
+    /**
      * @dev Returns the amount of want available in the strategy
      */
     function balanceOfWant() public view returns (uint256) {

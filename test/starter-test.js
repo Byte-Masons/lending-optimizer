@@ -127,7 +127,7 @@ describe('Vaults', function () {
       const deployedVault = await Vault.attach('0xC43BC54aefF66c16Ea26ba142Dc58682c4eFe407');
 
       const deployedStratProxyAddr = '0x7D2F7B4001322318050Fc11aD3d1dda5d2c82d38';
-      const deployedStratProxy = await Strategy.attach(deployedStratProxyAddr);
+      let deployedStratProxy = await Strategy.attach(deployedStratProxyAddr);
       const StrategyV2 = await ethers.getContractFactory('ReaperStrategyLendingOptimizerV2');
 
       const adminAccount = '0x3b410908e71Ee04e7dE2a87f8F9003AFe6c1c7cE';
@@ -167,14 +167,18 @@ describe('Vaults', function () {
         params: [maiHolderAddress],
       });
       const maiHolder = await ethers.provider.getSigner(maiHolderAddress);
-      await MAI.connect(maiHolder).transfer(deployedStratProxyAddr, ethers.utils.parseEther('27595.890194347616727031'));
+      await MAI.connect(maiHolder).transfer(deployedStratProxyAddr, ethers.utils.parseEther('27600.875338574012927406'));
 
-      // new strat balance should be 27,595.890194347616727031
+      // 27,600.875338574012927406
+      // new strat balance should be 27,600.875338574012927406
       stratBalance = await deployedStratProxy.balanceOf();
-      expect(stratBalance).to.equal(ethers.BigNumber.from('27595890194347616727031'));
+      expect(stratBalance).to.equal(ethers.BigNumber.from('27600875338574012927406'));
       // new vault balance should be 27,595.890194347616727031
       vaultBalance = await deployedVault.balance();
-      expect(vaultBalance).to.equal(ethers.BigNumber.from('27595890194347616727031'));
+      expect(vaultBalance).to.equal(ethers.BigNumber.from('27600875338574012927406'));
+
+      const newppfs = await deployedVault.getPricePerFullShare();
+      console.log(`PPFS = ${newppfs.toString()}`);
 
       // withdrawals should still revert though since shouldHarvestOnWithdraw flag is still set
       await expect(deployedVault.connect(shareholder).withdrawAll()).to.be.reverted;
@@ -191,6 +195,13 @@ describe('Vaults', function () {
 
       const shareholderFinalVaultBal = await deployedVault.balanceOf(shareholderAddr);
       expect(shareholderFinalVaultBal).to.equal(0);
+
+      // and admin should be able to pull out funds if desired
+      vaultBalance = await deployedVault.balance();
+      deployedStratProxy = StrategyV2.attach(deployedStratProxyAddr);
+      await deployedStratProxy.connect(admin).recoverLocalAssets(ethers.utils.parseEther('100'));
+      const finalVaultBalance = await deployedVault.balance();
+      expect(vaultBalance.sub(finalVaultBalance)).to.eq(ethers.utils.parseEther('100'));
     });
   });
 
